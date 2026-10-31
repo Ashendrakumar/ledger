@@ -32,6 +32,7 @@ export function Button({ label, variant = 'primary', icon, loading, height = 52,
       }}
       style={(s) => [
         {
+          transform: [{ scale: s.pressed ? 0.96 : 1 }],
           minHeight: Math.max(hit, height), borderRadius: 16, backgroundColor: v.bg,
           borderWidth: v.border ? 1.5 : 0, borderColor: v.border,
           alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,

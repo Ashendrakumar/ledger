@@ -18,7 +18,7 @@ export default function Login() {
   const valid = EMAIL_RE.test(email.trim());
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.ink }}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.ink }}>
       <View style={{ flex: 1, paddingTop: insets.top + 56, paddingHorizontal: 28, gap: 18 }}>
         <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: colors.mint, alignItems: 'center', justifyContent: 'center' }}>
           <Feather name="credit-card" size={32} color={colors.ink} />

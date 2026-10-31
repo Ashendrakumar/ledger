@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius } from '@/theme';
 
-/** Dimmed backdrop + rounded bottom sheet. Used by routes presented as transparentModal. */
+/** Rounded bottom sheet with a tap-to-dismiss backdrop. Used by routes presented as transparentModal. */
 export function Sheet({ children, style, maxHeight = '92%' }: ViewProps & { maxHeight?: `${number}%` }) {
   const insets = useSafeAreaInsets();
   return (
@@ -11,7 +11,7 @@ export function Sheet({ children, style, maxHeight = '92%' }: ViewProps & { maxH
       <Pressable
         accessibilityLabel="Close"
         onPress={() => router.back()}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(14,26,23,0.62)' }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'transparent' }}
       />
       <View
         style={[

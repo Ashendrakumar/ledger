@@ -16,11 +16,14 @@ export function Chip({ label, selected, tint = colors.ink, tintText = colors.whi
       accessibilityRole="button"
       accessibilityState={{ selected: !!selected }}
       onPress={onPress}
-      style={{
-        height: 44, paddingHorizontal: 16, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-        backgroundColor: selected ? tint : colors.white,
-        borderWidth: selected ? 0 : 1, borderColor: colors.borderStrong,
-      }}
+      style={(s) => [
+        {
+          height: 44, paddingHorizontal: 16, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: selected ? tint : colors.white,
+          borderWidth: selected ? 0 : 1, borderColor: colors.borderStrong,
+          transform: [{ scale: s.pressed ? 0.96 : 1 }],
+        },
+      ]}
     >
       <AppText style={{ fontFamily: selected ? font.bold : font.semibold, fontSize: 14 }} color={selected ? tintText : colors.text}>
         {label}

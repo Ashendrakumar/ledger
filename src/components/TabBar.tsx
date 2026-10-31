@@ -35,7 +35,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
           const e = navigation.emit({ type: 'tabPress', target: r.key, canPreventDefault: true });
           if (!focused && !e.defaultPrevented) navigation.navigate(r.name);
         }}
-        style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center', gap: 3 }}
+        style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center', gap: 3, backgroundColor: focused ? 'rgba(95, 211, 181, 0.16)' : 'transparent', borderRadius: 20 }}
       >
         <Feather name={t.icon} size={22} color={color} />
         <AppText style={{ fontFamily: focused ? font.bold : font.semibold, fontSize: 11 }} color={color}>{t.label}</AppText>
