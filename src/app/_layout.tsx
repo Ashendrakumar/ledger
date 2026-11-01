@@ -41,6 +41,9 @@ export default function RootLayout() {
           <Stack.Protected guard={signedIn}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="goals" />
+            <Stack.Screen name="loans" />
+            <Stack.Screen name="loan-new" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="loan/[id]" />
             <Stack.Screen name="settings" />
             <Stack.Screen name="goal-new" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
             <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />

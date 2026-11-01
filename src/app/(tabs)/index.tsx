@@ -13,13 +13,18 @@ import { EntryRow } from '@/components/EntryRow';
 import { PlanActualCard } from '@/components/PlanActualCard';
 import { useEntries } from '@/store/entries';
 import { useAuth } from '@/store/auth';
+import { useLoans } from '@/store/loans';
 import { useUi } from '@/store/ui';
 import { balance, balanceTrend, total } from '@/lib/selectors';
+import { outstandingBalance } from '@/lib/emi';
+import { formatINR } from '@/lib/money';
 
 export default function Home() {
   const entries = useEntries((s) => s.entries);
   const user = useAuth((s) => s.user);
   const { month, setMonth } = useUi();
+  const loans = useLoans((s) => s.loans);
+  const loanPayments = useLoans((s) => s.payments);
 
   const d = useMemo(() => {
     const t = (kind: 'actual' | 'planned', type: 'income' | 'expense' | 'saving') => total(entries, month, kind, type);
@@ -35,6 +40,9 @@ export default function Home() {
   }, [entries, month]);
 
   const name = user?.email.split('@')[0] ?? '';
+  const loanRows = useMemo(() => loans.map((l) => ({ l, outstanding: outstandingBalance(l, loanPayments) })), [loans, loanPayments]);
+  const loanOutstanding = loanRows.reduce((a, r) => a + r.outstanding, 0);
+  const loanEmi = loanRows.reduce((a, r) => a + r.l.emiPaise, 0);
   const open = (type: string) => router.push({ pathname: '/breakdown/[type]', params: { type } });
 
   return (
@@ -68,6 +76,19 @@ export default function Home() {
           <Money paise={d.plannedOut} variant="subheading" color={colors.white} />
         </View>
       </View>
+
+      {loanRows.length > 0 ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Loans" onPress={() => router.push('/loans')} style={{ backgroundColor: colors.savingsTint, borderRadius: 22, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: colors.savings, alignItems: 'center', justifyContent: 'center' }}>
+            <Feather name="credit-card" size={19} color={colors.white} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <AppText variant="subheading" style={{ fontSize: 15 }}>Loans</AppText>
+            <AppText variant="caption" color={colors.textSoft}>{loanRows.length} loan{loanRows.length === 1 ? '' : 's'} · EMI {formatINR(loanEmi)}/mo · {formatINR(loanOutstanding)} left</AppText>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.muted} />
+        </Pressable>
+      ) : null}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'stretch', gap: 12 }}>
         <PlanActualCard label="Income" actual={d.inc[0]} planned={d.inc[1]} tint={colors.incomeTint} fg={colors.income} text={colors.income} onPress={() => open('income')} style={{ width: 180 }} />
