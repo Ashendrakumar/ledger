@@ -12,6 +12,7 @@ import {
 import { colors } from '@/theme';
 import { useAuth } from '@/store/auth';
 import { AppLockGate } from '@/components/AppLockGate';
+import { initEmiReminderSync } from '@/lib/reminders';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -28,7 +29,14 @@ export default function RootLayout() {
     if (ready) SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
 
+  // EMI reminder scheduling + tap handling. No-ops in Expo Go / without permission.
+  useEffect(() => initEmiReminderSync(), []);
+
   if (!ready) return null;
+
+  // transparentModal routes must be transparent so the page behind stays visible —
+  // the global contentStyle (canvas) would otherwise paint a gray backdrop behind the sheet.
+  const modalOpts = { presentation: 'transparentModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: 'transparent' } } as const;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -42,12 +50,13 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="goals" />
             <Stack.Screen name="loans" />
-            <Stack.Screen name="loan-new" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="loan-new" options={modalOpts} />
+            <Stack.Screen name="loan-prepay" options={modalOpts} />
             <Stack.Screen name="loan/[id]" />
             <Stack.Screen name="settings" />
-            <Stack.Screen name="goal-new" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="add" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="breakdown/[type]" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="goal-new" options={modalOpts} />
+            <Stack.Screen name="add" options={modalOpts} />
+            <Stack.Screen name="breakdown/[type]" options={modalOpts} />
           </Stack.Protected>
         </Stack>
         <AppLockGate />

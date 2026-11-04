@@ -13,6 +13,8 @@ export interface Entry {
   /** 'YYYY-MM-DD', actual entries only */
   date?: string;
   note?: string;
+  /** Links an expense entry to the loan payment that created it (EMI/prepayment tracking). */
+  loanPaymentId?: string;
 }
 
 export interface Goal {
@@ -23,6 +25,8 @@ export interface Goal {
   /** 'YYYY-MM' */
   targetMonth: string;
 }
+
+export type PaymentKind = 'actual' | 'planned' | 'prepayment';
 
 export interface Loan {
   id: string;
@@ -37,6 +41,10 @@ export interface Loan {
   startMonth: string;
   /** EMI in paise, derived from principal / rate / tenure. */
   emiPaise: number;
+  /** Day of month the EMI is due (1..31). Defaults to 5. */
+  dueDay?: number;
+  /** When true, recording an actual payment also logs an expense entry in the ledger. */
+  trackExpenses?: boolean;
 }
 
 export interface LoanPayment {
@@ -46,7 +54,7 @@ export interface LoanPayment {
   month: string;
   /** Integer paise actually paid, or the planned EMI when kind is 'planned'. */
   amountPaise: number;
-  kind: Kind;
+  kind: PaymentKind;
   /** 'YYYY-MM-DD', actual payments only. */
   date?: string;
   note?: string;

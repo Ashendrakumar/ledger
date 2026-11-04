@@ -10,9 +10,10 @@ interface EntriesState {
   add: (e: Omit<Entry, 'id'>) => void;
   update: (id: string, patch: Partial<Omit<Entry, 'id'>>) => void;
   remove: (id: string) => void;
+  /** Removes the entries linked to any of the given loan payment ids. */
+  removeLoanPaymentEntries: (paymentIds: string[]) => void;
   /** Copies planned entries of the previous month into `month`. Returns count. */
-  copyPlanFromPrevious: (month: string) => number;
-  clearAll: () => void;
+  copyPlanFromPrevious: (month: string) => number;  clearAll: () => void;
   loadSample: () => void;
 }
 
@@ -26,6 +27,8 @@ export const useEntries = create<EntriesState>()(
       update: (id, patch) =>
         set((s) => ({ entries: s.entries.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
       remove: (id) => set((s) => ({ entries: s.entries.filter((x) => x.id !== id) })),
+      removeLoanPaymentEntries: (paymentIds) =>
+        set((s) => ({ entries: s.entries.filter((x) => !(x.loanPaymentId && paymentIds.includes(x.loanPaymentId))) })),
       copyPlanFromPrevious: (month) => {
         const prev = shiftMonth(month, -1);
         const source = get().entries.filter((x) => x.kind === 'planned' && x.month === prev);

@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Toggle } from '@/components/ui/Toggle';
 import { useAuth } from '@/store/auth';
+import { router } from 'expo-router';
 import { useEntries } from '@/store/entries';
 import { useSettings } from '@/store/settings';
 import { shareCsv } from '@/lib/csv';
 import { authenticate, canAuthenticate } from '@/components/AppLockGate';
+import { requestEmiReminderPermission } from '@/lib/reminders';
 
 function Row({ label, right, onPress, first }: { label: string; right?: React.ReactNode; onPress?: () => void; first?: boolean }) {
   return (
@@ -49,6 +51,14 @@ export default function Settings() {
     }
     if (await authenticate('Turn on app lock')) s.set('appLock', true);
   };
+  const toggleReminders = async (on: boolean) => {
+    if (!on) return s.set('billReminders', false);
+    const granted = await requestEmiReminderPermission();
+    s.set('billReminders', true);
+    if (!granted) {
+      Alert.alert('Notifications disabled', 'EMI reminders need notification access. Enable it for Ledger in system settings to get due-date alerts.');
+    }
+  };
   const confirm = (title: string, ok: string, fn: () => void) =>
     Alert.alert(title, undefined, [{ text: 'Cancel', style: 'cancel' }, { text: ok, style: 'destructive', onPress: fn }]);
 
@@ -71,6 +81,10 @@ export default function Settings() {
         <Row label="Hide amounts" right={<Toggle label="Hide amounts" value={s.hideAmounts} onValueChange={(v) => s.set('hideAmounts', v)} />} />
       </Group>
 
+      <Group title="PLANNING">
+        <Row first label="Goals" onPress={() => router.push('/goals')} />
+      </Group>
+
       <Group title="YOUR DATA">
         <Row first label="Export to CSV or Google Sheets" onPress={exportCsv} />
         <Row label="Load sample data" onPress={() => confirm('Replace your entries with sample data?', 'Replace', loadSample)} />
@@ -80,7 +94,7 @@ export default function Settings() {
       <Group title="SECURITY AND ALERTS">
         <Row first label="App lock (Face ID or PIN)" right={<Toggle label="App lock" value={s.appLock} onValueChange={toggleLock} />} />
         <Row label="Budget alerts" right={<Toggle label="Budget alerts" value={s.budgetAlerts} onValueChange={(v) => s.set('budgetAlerts', v)} />} />
-        <Row label="Bill reminders" right={<Toggle label="Bill reminders" value={s.billReminders} onValueChange={(v) => s.set('billReminders', v)} />} />
+        <Row label="Bill reminders" right={<Toggle label="Bill reminders" value={s.billReminders} onValueChange={(v) => { toggleReminders(v).catch(() => {}); }} />} />
       </Group>
 
       <Button label="Sign out" variant="danger" onPress={signOut} />

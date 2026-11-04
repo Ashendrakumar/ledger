@@ -1,5 +1,5 @@
 import { Pressable, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import { router, type Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,14 +8,14 @@ import { AppText } from './ui/AppText';
 
 type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
-const TABS: Record<string, { label: string; icon: React.ComponentProps<typeof Feather>['name'] }> = {
-  index: { label: 'Home', icon: 'home' },
-  activity: { label: 'Activity', icon: 'list' },
-  plan: { label: 'Plan', icon: 'calendar' },
-  insights: { label: 'Insights', icon: 'pie-chart' },
+const TABS: Record<string, { label: string; filled: React.ComponentProps<typeof Ionicons>['name']; outline: React.ComponentProps<typeof Ionicons>['name'] }> = {
+  index: { label: 'Home', filled: 'home', outline: 'home-outline' },
+  activity: { label: 'Activity', filled: 'list', outline: 'list-outline' },
+  plan: { label: 'Plan', filled: 'calendar', outline: 'calendar-outline' },
+  insights: { label: 'Insights', filled: 'pie-chart', outline: 'pie-chart-outline' },
 };
 
-/** Floating dark pill with a raised mint + button in the centre. */
+/** Floating dark pill with a raised mint + button in the centre. Active tab = filled icon, no background. */
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const routes = state.routes.filter((r) => TABS[r.name]);
@@ -35,9 +35,9 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
           const e = navigation.emit({ type: 'tabPress', target: r.key, canPreventDefault: true });
           if (!focused && !e.defaultPrevented) navigation.navigate(r.name);
         }}
-        style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center', gap: 3, backgroundColor: focused ? 'rgba(95, 211, 181, 0.16)' : 'transparent', borderRadius: 20 }}
+        style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center', gap: 3 }}
       >
-        <Feather name={t.icon} size={22} color={color} />
+        <Ionicons name={focused ? t.filled : t.outline} size={22} color={color} />
         <AppText style={{ fontFamily: focused ? font.bold : font.semibold, fontSize: 11 }} color={color}>{t.label}</AppText>
       </Pressable>
     );
@@ -59,7 +59,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
         onPress={() => router.push('/add')}
         style={{ width: 60, height: 60, marginTop: -30, borderRadius: 30, borderWidth: 4, borderColor: colors.canvas, backgroundColor: colors.mint, alignItems: 'center', justifyContent: 'center' }}
       >
-        <Feather name="plus" size={26} color={colors.ink} />
+        <Ionicons name="add" size={28} color={colors.ink} />
       </Pressable>
       {right.map(renderTab)}
     </View>

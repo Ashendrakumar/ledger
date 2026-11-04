@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, font } from '@/theme';
 import { Sheet } from '@/components/ui/Sheet';
+import { SheetActions } from '@/components/ui/SheetActions';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -61,15 +61,13 @@ export default function AddEntry() {
     ]);
 
   return (
-    <Sheet style={{ flex: 1 }}>
+    <Sheet
+      style={{ flex: 1 }}
+      footer={<SheetActions primaryLabel={editing ? 'Save changes' : 'Save'} onPrimary={save} disabled={!canSave} />}
+    >
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingBottom: 8 }} style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <AppText variant="heading" style={{ fontSize: 22 }}>{editing ? 'Edit entry' : 'Add entry'}</AppText>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.canvas, alignItems: 'center', justifyContent: 'center' }}>
-              <Feather name="x" size={20} color={colors.text} />
-            </Pressable>
-          </View>
+        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingBottom: 8 }} style={{ flex: 1, flexShrink: 1 }}>
+          <AppText variant="heading" style={{ fontSize: 22 }}>{editing ? 'Edit entry' : 'Add entry'}</AppText>
 
           <Segmented options={[{ value: 'actual', label: 'Actual' }, { value: 'planned', label: 'Planned' }]} value={kind} onChange={setKind} />
 
@@ -108,7 +106,6 @@ export default function AddEntry() {
           ) : null}
           <TextInput accessibilityLabel="Note" value={note} onChangeText={setNote} placeholder="Add a note" placeholderTextColor={colors.muted} style={field} />
 
-          <Button label={editing ? 'Save changes' : 'Save'} disabled={!canSave} height={56} onPress={save} />
           {editing ? <Button label="Delete entry" variant="danger" onPress={del} /> : null}
         </ScrollView>
       </KeyboardAvoidingView>

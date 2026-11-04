@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/theme';
 import { Sheet } from '@/components/ui/Sheet';
+import { SheetActions } from '@/components/ui/SheetActions';
 import { AppText } from '@/components/ui/AppText';
-import { Button } from '@/components/ui/Button';
 import { Money } from '@/components/ui/Money';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { TYPE_STYLE } from '@/components/EntryRow';
@@ -31,15 +31,10 @@ export default function Breakdown() {
   const actual = rows.reduce((a, r) => a + r.actual, 0);
 
   return (
-    <Sheet>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <View style={{ flex: 1 }}>
-          <AppText variant="heading" style={{ fontSize: 22 }}>{TITLES[type]}</AppText>
-          <AppText variant="caption" color={colors.muted}>{fullMonth(month)} · planned vs actual by category</AppText>
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.canvas, alignItems: 'center', justifyContent: 'center' }}>
-          <Feather name="x" size={18} color={colors.text} />
-        </Pressable>
+    <Sheet footer={<SheetActions primaryLabel="Done" onPrimary={() => router.back()} />}>
+      <View style={{ marginBottom: 4 }}>
+        <AppText variant="heading" style={{ fontSize: 22 }}>{TITLES[type]}</AppText>
+        <AppText variant="caption" color={colors.muted}>{fullMonth(month)} · planned vs actual by category</AppText>
       </View>
 
       <View style={{ flexDirection: 'row', gap: 10, marginVertical: 12 }}>
@@ -53,7 +48,7 @@ export default function Breakdown() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flexGrow: 0 }}>
+      <ScrollView showsVerticalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 1 }}>
         {rows.length === 0 ? <AppText color={colors.muted} style={{ paddingVertical: 20 }}>Nothing recorded for this month.</AppText> : null}
         {rows.map((r) => {
           // Expenses and savings are "over" when actual exceeds plan; income is "short" when it falls under.
@@ -79,7 +74,6 @@ export default function Breakdown() {
           );
         })}
       </ScrollView>
-      <View style={{ marginTop: 12 }}><Button label="Done" height={54} onPress={() => router.back()} /></View>
     </Sheet>
   );
 }

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Ledger app icon">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="45%"><stop offset="0" stop-color="#288270" stop-opacity=".28"/><stop offset="1" stop-color="#288270" stop-opacity="0"/></radialGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8CECD4"/><stop offset="1" stop-color="#3CB496"/></linearGradient>
+    <linearGradient id="coin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CEF0E5"/></linearGradient>
+    <filter id="blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>
+    <clipPath id="l"><rect x="292" y="232" width="140" height="540" rx="70"/><rect x="292" y="632" width="448" height="140" rx="70"/></clipPath>
+  </defs>
+  <rect width="1024" height="1024" fill="#0E1A17"/>
+  <rect width="1024" height="1024" fill="url(#glow)"/>
+  <rect x="292" y="232" width="140" height="540" rx="70" fill="url(#mint)"/>
+  <rect x="292" y="632" width="448" height="140" rx="70" fill="url(#mint)"/>
+  <g clip-path="url(#l)"><circle cx="568" cy="532" r="110" fill="#062820" opacity=".6" filter="url(#blur)"/></g>
+  <circle cx="568" cy="506" r="110" fill="url(#coin)"/>
+  <circle cx="568" cy="506" r="68" fill="none" stroke="#0E1A17" stroke-width="17"/>
+</svg>

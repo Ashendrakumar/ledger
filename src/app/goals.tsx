@@ -1,4 +1,4 @@
-import { View } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '@/theme';
@@ -33,6 +33,14 @@ export default function Goals() {
               <AppText variant="caption" color={colors.textSoft}>{formatINR(g.savedPaise)} of {formatINR(g.targetPaise)}</AppText>
               <AppText variant="caption" color={colors.muted} style={{ fontSize: 12 }}>Target {fullMonth(g.targetMonth)}</AppText>
             </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Edit goal ${g.name}`}
+              onPress={() => router.push({ pathname: '/goal-new', params: { id: g.id } })}
+              style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Feather name="edit-2" size={18} color={colors.muted} />
+            </Pressable>
           </View>
           <Button label="Add ₹1,000" variant="outline" height={44} icon={<Feather name="plus" size={16} color={colors.primary} />}
             onPress={() => addMoney(g.id, toPaise(1000))} />

@@ -5,9 +5,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "icon": "./assets/icon.png",
+      "darkModeIcon": "./assets/icon-dark.png"
     },
     "android": {
       "adaptiveIcon": {
@@ -16,6 +18,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "notificationIcon": "./assets/notification-icon.png",
       "predictiveBackGestureEnabled": false,
       "package": "com.ifourashendra.ledger",
       "permissions": [
@@ -30,7 +33,16 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#E6F4FE"
+        }
+      ],
+      "expo-notifications",
       [
         "expo-local-authentication",
         {
