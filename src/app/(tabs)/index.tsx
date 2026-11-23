@@ -16,7 +16,7 @@ import { useLoans } from '@/store/loans';
 import { useGoals } from '@/store/goals';
 import { useUi } from '@/store/ui';
 import { balance, balanceTrend, total } from '@/lib/selectors';
-import { aggregateLoans, dueDayOf } from '@/lib/emi';
+import { aggregateLoans, buildSchedule, dueDayOf } from '@/lib/emi';
 import { fullMonth, shiftMonth, shortMonth, labelMonth } from '@/lib/dates';
 import { formatINR } from '@/lib/money';
 
@@ -49,6 +49,14 @@ export default function Home() {
   const overdue = agg.overdue;
   const allLoansPaidOff = loans.length > 0 && loanOutstanding <= 0;
   const nextDueLoan = agg.nextDue ? loans.find((l) => l.id === agg.nextDue!.loanId) : undefined;
+  const partialLeft = useMemo(() => {
+    let left = 0;
+    for (const l of loans) {
+      const row = buildSchedule(l, loanPayments).find((r) => r.month === month);
+      if (row?.status === 'partial') left += Math.max(0, row.emi - row.paidAmount);
+    }
+    return left;
+  }, [loans, loanPayments, month]);
 
   const goalTotals = useMemo(() => {
     const saved = goals.reduce((a, g) => a + g.savedPaise, 0);
@@ -72,73 +80,79 @@ export default function Home() {
     }
   };
 
-  return (
-    <Screen>
-      {/* Header: avatar + greeting + month picker + alerts */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push('/settings')}
-          style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-          <Feather name="user" size={17} color={colors.white} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <AppText variant="caption" color={colors.muted} style={{ fontSize: 11 }}>{greeting}</AppText>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Change month, currently ${fullMonth(month)}`} onPress={() => setMonthMenu(true)}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', minHeight: 28 }}>
-            <AppText variant="heading" style={{ fontSize: 15 }}>{fullMonth(month)}</AppText>
-            <Feather name="chevron-down" size={15} color={colors.text} />
-          </Pressable>
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={overdue > 0 ? `Alerts, ${overdue} overdue EMI${overdue === 1 ? '' : 's'}` : 'Alerts'} onPress={onBell}
-          style={{ width: 46, height: 46, marginRight: -8, alignItems: 'center', justifyContent: 'center' }}>
-          <Feather name="bell" size={22} color={colors.text} />
-          {overdue > 0 ? (
-            <View style={{ position: 'absolute', top: 10, right: 11, width: 9, height: 9, borderRadius: 4.5, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.canvas }} />
-          ) : null}
+  const header = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push('/settings')}
+        style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+        <Feather name="user" size={17} color={colors.white} />
+      </Pressable>
+      <View style={{ flex: 1 }}>
+        <AppText variant="caption" color={colors.textSoft} style={{ fontSize: 11 }}>{greeting}</AppText>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Change month, currently ${fullMonth(month)}`} onPress={() => setMonthMenu(true)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', minHeight: 28 }}>
+          <AppText variant="heading" color={colors.text} style={{ fontSize: 15 }}>{fullMonth(month)}</AppText>
+          <Feather name="chevron-down" size={15} color={colors.text} />
         </Pressable>
       </View>
+      <Pressable accessibilityRole="button" accessibilityLabel={overdue > 0 ? `Alerts, ${overdue} overdue EMI${overdue === 1 ? '' : 's'}` : 'Alerts'} onPress={onBell}
+        style={{ width: 46, height: 46, marginRight: -8, alignItems: 'center', justifyContent: 'center' }}>
+        <Feather name="bell" size={22} color={colors.text} />
+        {overdue > 0 ? (
+          <View style={{ position: 'absolute', top: 10, right: 11, width: 9, height: 9, borderRadius: 4.5, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.canvas }} />
+        ) : null}
+      </Pressable>
+    </View>
+  );
 
+  return (
+    <>
+      <Screen header={header}>
       <MonthMenu visible={monthMenu} month={month} onChange={setMonth} onClose={() => setMonthMenu(false)} />
 
-      {/* Balance hero */}
-      <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 10 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <AppText variant="caption" color={colors.onInkMuted}>Total balance</AppText>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: d.change >= 0 ? 'rgba(95,211,181,0.16)' : 'rgba(255,156,143,0.14)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Feather name={d.change >= 0 ? 'trending-up' : 'trending-down'} size={12} color={d.change >= 0 ? colors.mint : '#FF9C8F'} />
-            <Money paise={d.change} sign variant="caption" color={d.change >= 0 ? colors.mint : '#FF9C8F'} style={{ fontFamily: 'PlusJakartaSans_700Bold' }} />
-            <AppText variant="caption" color={d.change >= 0 ? colors.mint : '#FF9C8F'} style={{ fontSize: 11 }}>this month</AppText>
-          </View>
-        </View>
-        <Money paise={d.bal} variant="display" color={colors.white} />
-        <View style={{ marginTop: 2 }}>
-          <Sparkline values={d.trend} width={300} height={44} />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2, marginTop: 4 }}>
-            {trendMonths.map((m, i) => (
-              <AppText key={i} variant="caption" color={colors.onInkMuted} style={{ fontSize: 10 }}>{m}</AppText>
-            ))}
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 10 }}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <AppText variant="caption" color={colors.onInkMuted}>Planned (spend + savings)</AppText>
-            <Money paise={d.plannedOut} variant="subheading" color={colors.white} />
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <AppText variant="caption" color={colors.onInkMuted}>Spent + saved so far</AppText>
-            <Money paise={d.actualOut} variant="subheading" color={colors.white} />
-          </View>
-        </View>
-      </View>
-
-      {/* Planned vs actual */}
+      {/* Overview */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <AppText variant="heading">Planned vs actual</AppText>
+        <AppText variant="heading">Overview</AppText>
         <Pressable accessibilityRole="link" accessibilityLabel="See the full plan" onPress={() => router.navigate('/plan')} style={{ flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 44 }}>
           <AppText variant="caption" color={colors.muted}>Swipe for more</AppText>
           <Feather name="chevron-right" size={14} color={colors.muted} />
         </Pressable>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'stretch', gap: 12 }}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 12, paddingRight: 2 }}
+      >
+        <View style={{ width: 300, backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 10 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <AppText variant="caption" color={colors.onInkMuted}>Total balance</AppText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: d.change >= 0 ? 'rgba(95,211,181,0.16)' : 'rgba(255,156,143,0.14)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
+              <Feather name={d.change >= 0 ? 'trending-up' : 'trending-down'} size={12} color={d.change >= 0 ? colors.mint : '#FF9C8F'} />
+              <Money paise={d.change} sign variant="caption" color={d.change >= 0 ? colors.mint : '#FF9C8F'} style={{ fontFamily: 'PlusJakartaSans_700Bold' }} />
+              <AppText variant="caption" color={d.change >= 0 ? colors.mint : '#FF9C8F'} style={{ fontSize: 11 }}>this month</AppText>
+            </View>
+          </View>
+          <Money paise={d.bal} variant="display" color={colors.white} />
+          <View style={{ marginTop: 2 }}>
+            <Sparkline values={d.trend} width={264} height={44} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2, marginTop: 4 }}>
+              {trendMonths.map((m, i) => (
+                <AppText key={i} variant="caption" color={colors.onInkMuted} style={{ fontSize: 10 }}>{m}</AppText>
+              ))}
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 10 }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <AppText variant="caption" color={colors.onInkMuted}>Planned (spend + savings)</AppText>
+              <Money paise={d.plannedOut} variant="subheading" color={colors.white} />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <AppText variant="caption" color={colors.onInkMuted}>Spent + saved so far</AppText>
+              <Money paise={d.actualOut} variant="subheading" color={colors.white} />
+            </View>
+          </View>
+        </View>
+
         <PlanActualCard label="Income" icon="arrow-down-left" actual={d.inc[0]} planned={d.inc[1]} tint={colors.incomeTint} fg={colors.income} text={colors.income} onPress={() => open('income')} style={{ width: 168 }} />
         <PlanActualCard label="Expenses" icon="arrow-up-right" actual={d.exp[0]} planned={d.exp[1]} tint={colors.expenseTint} fg={colors.expense} text={colors.expenseText} onPress={() => open('expense')} style={{ width: 168 }} />
         <PlanActualCard label="Savings" icon="bookmark" actual={d.sav[0]} planned={d.sav[1]} tint={colors.savingsTint} fg={colors.savings} text={colors.savingsText} onPress={() => open('saving')} style={{ width: 168 }} />
@@ -156,6 +170,8 @@ export default function Home() {
             <AppText variant="caption" color={colors.muted}>No loans yet — track EMIs here</AppText>
           ) : overdue > 0 ? (
             <AppText variant="caption" color={colors.danger} style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>{overdue} overdue · EMI {formatINR(loanEmi)}/mo</AppText>
+          ) : partialLeft > 0 ? (
+            <AppText variant="caption" color={colors.expense} style={{ fontFamily: 'PlusJakartaSans_700Bold' }} numberOfLines={1}>EMI partially paid · {formatINR(partialLeft)} left</AppText>
           ) : agg.nextDue ? (
             <AppText variant="caption" color={colors.expenseText} numberOfLines={1}>Next EMI {formatINR(agg.nextDue.emi)} · {nextDueLoan ? dueDayOf(nextDueLoan) : 5} {labelMonth(agg.nextDue.month)}</AppText>
           ) : allLoansPaidOff ? (
@@ -213,6 +229,7 @@ export default function Home() {
           </View>
         ))}
       </Card>
-    </Screen>
+      </Screen>
+    </>
   );
 }

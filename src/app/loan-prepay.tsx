@@ -51,8 +51,7 @@ export default function PrepayLoan() {
 
   if (!loan || !ov) {
     return (
-      <Screen tabBar={false}>
-        <ScreenHeader title="Prepay" back />
+      <Screen tabBar={false} header={<ScreenHeader title="Prepay" back />}>
         <AppText color={colors.muted}>Loan not found.</AppText>
       </Screen>
     );
@@ -86,7 +85,7 @@ export default function PrepayLoan() {
   const payoffBase = ov.closedIn ?? ov.schedule[ov.schedule.length - 1]?.month;
 
   return (
-    <Sheet footer={<SheetActions primaryLabel="Record prepayment" onPrimary={save} disabled={!amountOk || !dateOk} />}>
+    <Sheet style={{ flex: 1 }} footer={<SheetActions primaryLabel="Record prepayment" onPrimary={save} disabled={!amountOk || !dateOk} />}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ gap: 16, flexShrink: 1 }}>
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16, paddingBottom: 8 }} style={{ flexShrink: 1 }}>
           <AppText variant="heading" style={{ fontSize: 22 }}>Prepay loan</AppText>

@@ -1,13 +1,12 @@
-export const Notifications = {
-  setNotificationHandler: () => {},
-  requestPermissionsAsync: async () => ({ granted: false }),
-  getPermissionsAsync: async () => ({ granted: false }),
-  getExpoPushTokenAsync: async () => null,
-  scheduleNotificationAsync: async () => null,
-  cancelScheduledNotificationAsync: async () => {},
-  cancelAllScheduledNotificationsAsync: async () => {},
-  addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
-  addNotificationResponseListener: () => ({ remove: () => {} }),
-  addNotificationReceivedListener: () => ({ remove: () => {} }),
-  SchedulableTriggerInputTypes: { DATE: 'date' },
-} as any;
+import * as ExpoNotifications from 'expo-notifications';
+
+/**
+ * Real expo-notifications binding used by the app (local/EMI reminders).
+ * Re-exported as a single `Notifications` object to preserve existing imports.
+ *
+ * Note: push/remote notification features and some behaviors require a
+ * development build or production build (Expo Go support is limited on Android).
+ */
+export const Notifications = ExpoNotifications;
+export type * from 'expo-notifications';
+

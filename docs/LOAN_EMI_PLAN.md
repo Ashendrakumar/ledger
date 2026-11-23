@@ -1,8 +1,26 @@
 # Loan & EMI — Complete Plan
 
-**Status:** Proposed (for review) — nothing in this doc implements itself; each phase is a separate PR-sized change.
+**Status:** In progress (partially implemented) — core loan/EMI flows exist; remaining phase items tracked in `docs/TODO.md` and below.
 **Scope:** Data model & EMI math · reminder/overdue logic · Home & Plan integration · all loan screens & flows.
-**Author context:** Current implementation as of 2026-11. Home/Plan/Loans already ship a basic version of most pieces (see §2).
+**Author context:** Current implementation as of 2026-11. Home/Plan/Loans ship most core pieces (see §2) with additional improvements applied after verification.
+
+## Implementation status (verified 2026-11-13)
+
+**Implemented / present**
+- Data model v2 concepts in code: `dueDay`, payment kinds including `prepayment`, `trackExpenses`, loan/payment validation & migration in `src/store/loans.ts`.
+- EMI engine and overview: `src/lib/emi.ts` provides `computeEMI`, schedule building, status handling, `getLoanOverview`, aggregates, totals, and helpers used across screens.
+- Screens/flows: `/loans`, `/loan-new`, `/loan/[id]`, `/loan-prepay`, EMI sections on Home/Plan, debt-service card on Insights, reminder settings/toggle and sync wiring in code.
+- Recent UI/UX updates:
+  - `/loan-new`: live estimate now includes a **first-3-installments mini schedule preview** (month, interest/principal split, EMI).
+  - `/loans`: **completed (paid-off) loans** are separated into a collapsible **“Completed loans”** section.
+  - Plan hero: EMI line now shows **“EMI left to pay this month”** as remaining amount plus **“of ₹X due”** context.
+  - Home Loans & EMI card: adds **“EMI partially paid · ₹Y left”** state for the selected month when applicable.
+
+**Still pending / gaps vs full plan**
+- P0: automated EMI math/unit tests (e.g. `src/lib/emi` cases in §7/§8) and full acceptance-criteria verification.
+- P1: loan detail schedule virtualization (`FlatList`) and row-tap edit-payment sheet (current UI uses in-screen/inline flows), and any remaining spec copy/state refinements.
+- P2: real-device/dev-build validation of notifications/reminders end-to-end (module wiring done, but behavior must be validated on supported builds; permission/UX edge cases may remain).
+- P3: foreclosure/early-closure summary, CSV export of loans, richer payoff/advanced polish, autopay informational flag (basic prepayment flow exists).
 
 ---
 

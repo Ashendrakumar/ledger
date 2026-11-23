@@ -69,7 +69,7 @@ export function Sheet({ children, footer, style, maxHeight = '92%' }: ViewProps 
       />
       <Animated.View
         style={[
-          { maxHeight, width: '100%', backgroundColor: colors.white, borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 16), overflow: 'hidden' },
+          { maxHeight, width: '100%', backgroundColor: colors.white, borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, paddingHorizontal: 14, paddingBottom: Math.max(insets.bottom, 16), overflow: 'hidden' },
           style,
           sheetStyle,
         ]}

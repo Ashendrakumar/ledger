@@ -8,7 +8,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
-import { MonthPill } from '@/components/ui/MonthPill';
+import { MonthMenu } from '@/components/MonthMenu';
 import { TYPE_STYLE } from '@/components/EntryRow';
 import { useEntries } from '@/store/entries';
 import { useLoans } from '@/store/loans';
@@ -48,6 +48,7 @@ export default function Plan() {
   const { loans, payments } = useLoans();
   const { month, setMonth } = useUi();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [monthMenu, setMonthMenu] = useState(false);
   const toggle = (key: string) => setCollapsed((s) => ({ ...s, [key]: !s[key] }));
 
   const planned = useMemo(() => inMonth(entries, month, 'planned'), [entries, month]);
@@ -74,12 +75,21 @@ export default function Plan() {
     } else copyPlanFromPrevious(month);
   };
 
+  const header = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      <AppText variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={{ flex: 1 }}>Plan</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Change month, currently ${fullMonth(month)}`} onPress={() => setMonthMenu(true)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', minHeight: 28 }}>
+        <AppText variant="heading" style={{ fontSize: 15 }}>{fullMonth(month)}</AppText>
+        <Feather name="chevron-down" size={15} color={colors.text} />
+      </Pressable>
+    </View>
+  );
+
   return (
-    <Screen>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <AppText variant="title">Plan</AppText>
-        <MonthPill month={month} onChange={setMonth} />
-      </View>
+    <>
+      <Screen header={header}>
+      <MonthMenu visible={monthMenu} month={month} onChange={setMonth} onClose={() => setMonthMenu(false)} />
 
       <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 12 }}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -92,7 +102,10 @@ export default function Plan() {
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 10 }}>
           <AppText variant="caption" color={colors.onInkMuted}>EMI left to pay this month</AppText>
-          <Money paise={emiLeft} variant="subheading" color={colors.mint} />
+          <View style={{ alignItems: 'flex-end' }}>
+            <Money paise={emiLeft} variant="subheading" color={colors.mint} />
+            {emiTotal > 0 ? <AppText variant="caption" color={colors.onInkMuted} style={{ fontSize: 11 }}>of {formatINR(emiTotal)} due</AppText> : null}
+          </View>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 10 }}>
           <AppText variant="caption" color={colors.onInkMuted}>Left to allocate</AppText>
@@ -101,8 +114,6 @@ export default function Plan() {
           </View>
         </View>
       </View>
-
-      <Button variant="outline" label={`Copy plan from ${fullMonth(prev)}`} icon={<Feather name="copy" size={18} color={colors.primary} />} onPress={copy} />
 
       {GROUPS.map((g) => {
         const rows = planned.filter((e) => e.type === g.type);
@@ -167,6 +178,9 @@ export default function Plan() {
           );
         })}
       </Card>
-    </Screen>
+
+      <Button variant="outline" label={`Copy plan from ${fullMonth(prev)}`} icon={<Feather name="copy" size={18} color={colors.primary} />} onPress={copy} />
+      </Screen>
+    </>
   );
 }

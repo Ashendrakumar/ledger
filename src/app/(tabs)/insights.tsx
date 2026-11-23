@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
-import { View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '@/theme';
 import { Screen } from '@/components/Screen';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
-import { MonthPill } from '@/components/ui/MonthPill';
+import { MonthMenu } from '@/components/MonthMenu';
 import { Donut, DONUT_COLORS } from '@/components/charts/Donut';
 import { BarChart } from '@/components/charts/BarChart';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -15,13 +15,14 @@ import { useUi } from '@/store/ui';
 import { byCategory, monthlyHistory, total } from '@/lib/selectors';
 import { getLoanOverview } from '@/lib/emi';
 import { formatINR } from '@/lib/money';
-import { shortMonth, labelMonth } from '@/lib/dates';
+import { fullMonth, labelMonth, shortMonth } from '@/lib/dates';
 
 export default function Insights() {
   const entries = useEntries((s) => s.entries);
   const { month, setMonth } = useUi();
   const loans = useLoans((s) => s.loans);
   const loanPayments = useLoans((s) => s.payments);
+  const [monthMenu, setMonthMenu] = useState(false);
 
   const d = useMemo(() => {
     const cats = byCategory(entries, month, 'expense').filter((c) => c.actual > 0).sort((a, b) => b.actual - a.actual);
@@ -52,19 +53,28 @@ export default function Insights() {
     return { emi, income, ratio, band, remainingInterest, payoffMonth };
   }, [loans, loanPayments, entries, month]);
 
+  const header = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      <AppText variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={{ flex: 1 }}>Insights</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Change month, currently ${fullMonth(month)}`} onPress={() => setMonthMenu(true)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', minHeight: 28 }}>
+        <AppText variant="heading" style={{ fontSize: 15 }}>{fullMonth(month)}</AppText>
+        <Feather name="chevron-down" size={15} color={colors.text} />
+      </Pressable>
+    </View>
+  );
+
   return (
-    <Screen>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <AppText variant="title">Insights</AppText>
-        <MonthPill month={month} onChange={setMonth} />
-      </View>
+    <>
+      <Screen header={header}>
+      <MonthMenu visible={monthMenu} month={month} onChange={setMonth} onClose={() => setMonthMenu(false)} />
 
       <Card style={{ gap: 12 }}>
         <AppText variant="subheading">Where your money went</AppText>
         {d.cats.length === 0 ? <AppText color={colors.muted} variant="caption">No spending logged this month.</AppText> : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          <View style={{ alignItems: 'center', gap: 14 }}>
             <Donut values={d.cats.map((c) => c.actual)} centerTop={formatINR(d.spent)} centerBottom="spent" />
-            <View style={{ flex: 1, gap: 6 }}>
+            <View style={{ width: '100%', gap: 6 }}>
               {d.cats.slice(0, 6).map((c, i) => (
                 <View key={c.category} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: DONUT_COLORS[i], borderWidth: i > 3 ? 1 : 0, borderColor: '#D9A57F' }} />
@@ -122,6 +132,7 @@ export default function Insights() {
           </View>
         ) : null}
       </View>
-    </Screen>
+      </Screen>
+    </>
   );
 }

@@ -63,8 +63,7 @@ export default function Settings() {
     Alert.alert(title, undefined, [{ text: 'Cancel', style: 'cancel' }, { text: ok, style: 'destructive', onPress: fn }]);
 
   return (
-    <Screen tabBar={false}>
-      <ScreenHeader title="Settings" back />
+    <Screen tabBar={false} header={<ScreenHeader title="Settings" back />}>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.ink, borderRadius: 22, padding: 14 }}>
         <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>

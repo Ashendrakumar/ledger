@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -6,7 +6,6 @@ import { colors, radius } from '@/theme';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { AppText } from '@/components/ui/AppText';
-import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -26,6 +25,7 @@ const iconForLoan = (name: string): React.ComponentProps<typeof Feather>['name']
 
 export default function Loans() {
   const { loans, payments } = useLoans();
+  const [showCompleted, setShowCompleted] = useState(false);
 
   const rows = useMemo(
     () =>
@@ -38,28 +38,79 @@ export default function Loans() {
     [loans, payments],
   );
 
+  const activeRows = rows.filter((r) => r.outstanding > 0);
+  const completedRows = rows.filter((r) => r.outstanding <= 0);
   const outstandingTotal = rows.reduce((a, r) => a + r.outstanding, 0);
-  const emiTotal = rows.reduce((a, r) => a + r.loan.emiPaise, 0);
+  const emiTotal = activeRows.reduce((a, r) => a + r.loan.emiPaise, 0);
   const borrowedTotal = rows.reduce((a, r) => a + r.loan.principalPaise, 0);
   const paidTotal = Math.max(0, borrowedTotal - outstandingTotal);
   const agg = useMemo(() => aggregateLoans(loans, payments), [loans, payments]);
   const nextDue = agg.nextDue;
 
+  const renderLoanCard = ({ loan, outstanding, repaid, ratio, nextDue, overdueCount, closedIn, payoffMonth }: (typeof rows)[number]) => {
+    const status =
+      outstanding <= 0
+        ? { label: `Paid off${closedIn ? ` · ${labelMonth(closedIn)}` : ''}`, color: colors.savings }
+        : overdueCount > 0
+          ? { label: `${overdueCount} overdue`, color: colors.danger }
+          : nextDue
+            ? { label: `Due ${dueDayOf(loan)} ${shortMonth(nextDue.month)}`, color: colors.muted }
+            : null;
+    return (
+      <Pressable
+        key={loan.id}
+        accessibilityRole="button"
+        accessibilityLabel={`Loan ${loan.name}`}
+        onPress={() => router.push({ pathname: '/loan/[id]', params: { id: loan.id } })}
+      >
+        <Card style={{ gap: 10, borderRadius: 22 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.expenseTint, alignItems: 'center', justifyContent: 'center' }}>
+              <Feather name={iconForLoan(loan.name)} size={21} color={colors.expense} />
+            </View>
+            <View style={{ flex: 1, gap: 1, minWidth: 0 }}>
+              <AppText variant="subheading" numberOfLines={1} style={{ fontSize: 16 }}>{loan.name}</AppText>
+              <AppText variant="caption" color={colors.muted} style={{ fontSize: 12 }} numberOfLines={1}>{loan.annualRatePct}% p.a. · {loan.tenureMonths} months{payoffMonth ? ` · payoff ${labelMonth(payoffMonth)}` : ''}</AppText>
+            </View>
+            {status ? <AppText variant="caption" color={status.color} style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_700Bold' }}>{status.label}</AppText> : null}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+            <View style={{ flex: 1, gap: 1 }}>
+              <AppText variant="caption" color={colors.muted} style={{ fontSize: 11 }}>OUTSTANDING</AppText>
+              <Money paise={outstanding} variant="subheading" style={{ fontSize: 19 }} />
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 1 }}>
+              <AppText variant="caption" color={colors.muted} style={{ fontSize: 11 }}>EMI / MO</AppText>
+              <Money paise={loan.emiPaise} variant="subheading" />
+            </View>
+          </View>
+          <ProgressBar ratio={ratio} color={colors.savings} height={6} />
+          <AppText variant="caption" color={colors.textSoft} style={{ fontSize: 11 }}>{formatINR(repaid)} repaid of {formatINR(loan.principalPaise)}</AppText>
+        </Card>
+      </Pressable>
+    );
+  };
+
   return (
-    <Screen tabBar={false}>
-      <ScreenHeader
-        title="Loans & EMI"
-        back
-        right={
-          <Button
-            label="New"
-            height={40}
-            onPress={() => router.push('/loan-new')}
-            icon={<Feather name="plus" size={15} color={colors.white} />}
-            style={{ paddingHorizontal: 16, borderRadius: 20, backgroundColor: colors.ink }}
-          />
-        }
-      />
+    <Screen
+      tabBar={false}
+      header={
+        <ScreenHeader
+          title="Loans & EMI"
+          back
+          right={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add loan"
+              onPress={() => router.push('/loan-new')}
+              style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Feather name="plus" size={18} color={colors.white} />
+            </Pressable>
+          }
+        />
+      }
+    >
 
       {/* Ink summary hero */}
       <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 8 }}>
@@ -88,58 +139,33 @@ export default function Loans() {
       {rows.length === 0 ? (
         <Card style={{ alignItems: 'center', padding: 24, gap: 10 }}>
           <AppText color={colors.muted} variant="body">No loans yet. Add one to track the EMI, interest and progress.</AppText>
-          <Button
-            label="New loan"
-            height={48}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add loan"
             onPress={() => router.push('/loan-new')}
-            icon={<Feather name="plus" size={16} color={colors.mint} />}
-            style={{ paddingHorizontal: 20, borderRadius: 24 }}
-          />
+            style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Feather name="plus" size={18} color={colors.mint} />
+          </Pressable>
         </Card>
       ) : (
-        rows.map(({ loan, outstanding, repaid, ratio, nextDue, overdueCount, closedIn, payoffMonth }) => {
-          const status =
-            outstanding <= 0
-              ? { label: `Paid off${closedIn ? ` · ${labelMonth(closedIn)}` : ''}`, color: colors.savings }
-              : overdueCount > 0
-                ? { label: `${overdueCount} overdue`, color: colors.danger }
-                : nextDue
-                  ? { label: `Due ${dueDayOf(loan)} ${shortMonth(nextDue.month)}`, color: colors.muted }
-                  : null;
-          return (
-            <Pressable
-              key={loan.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Loan ${loan.name}`}
-              onPress={() => router.push({ pathname: '/loan/[id]', params: { id: loan.id } })}
-            >
-              <Card style={{ gap: 10, borderRadius: 22 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: colors.expenseTint, alignItems: 'center', justifyContent: 'center' }}>
-                    <Feather name={iconForLoan(loan.name)} size={21} color={colors.expense} />
-                  </View>
-                  <View style={{ flex: 1, gap: 1 }}>
-                    <AppText variant="subheading" numberOfLines={1} style={{ fontSize: 16 }}>{loan.name}</AppText>
-                    <AppText variant="caption" color={colors.muted} style={{ fontSize: 12 }} numberOfLines={1}>{loan.annualRatePct}% p.a. · {loan.tenureMonths} months{payoffMonth ? ` · payoff ${labelMonth(payoffMonth)}` : ''}</AppText>
-                  </View>
-                  {status ? <AppText variant="caption" color={status.color} style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_700Bold' }}>{status.label}</AppText> : null}
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
-                  <View style={{ flex: 1, gap: 1 }}>
-                    <AppText variant="caption" color={colors.muted} style={{ fontSize: 11 }}>OUTSTANDING</AppText>
-                    <Money paise={outstanding} variant="subheading" style={{ fontSize: 19 }} />
-                  </View>
-                  <View style={{ alignItems: 'flex-end', gap: 1 }}>
-                    <AppText variant="caption" color={colors.muted} style={{ fontSize: 11 }}>EMI / MO</AppText>
-                    <Money paise={loan.emiPaise} variant="subheading" />
-                  </View>
-                </View>
-                <ProgressBar ratio={ratio} color={colors.savings} height={6} />
-                <AppText variant="caption" color={colors.textSoft} style={{ fontSize: 11 }}>{formatINR(repaid)} repaid of {formatINR(loan.principalPaise)}</AppText>
-              </Card>
-            </Pressable>
-          );
-        })
+        <>
+          {activeRows.map(renderLoanCard)}
+          {completedRows.length > 0 ? (
+            <View style={{ gap: 10 }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={showCompleted ? 'Hide completed loans' : 'Show completed loans'}
+                onPress={() => setShowCompleted((v) => !v)}
+                style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 }}
+              >
+                <AppText variant="subheading">Completed loans ({completedRows.length})</AppText>
+                <Feather name={showCompleted ? 'chevron-up' : 'chevron-down'} size={18} color={colors.muted} />
+              </Pressable>
+              {showCompleted ? completedRows.map(renderLoanCard) : null}
+            </View>
+          ) : null}
+        </>
       )}
     </Screen>
   );

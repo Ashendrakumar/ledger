@@ -10,9 +10,9 @@ import { Card } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
 import { Toggle } from '@/components/ui/Toggle';
 import { useLoans } from '@/store/loans';
-import { shiftMonth, monthKey } from '@/lib/dates';
-import { toPaise } from '@/lib/money';
-import { computeLoanTotals } from '@/lib/emi';
+import { shiftMonth, monthKey, labelMonth } from '@/lib/dates';
+import { formatINR, toPaise } from '@/lib/money';
+import { buildSchedule, computeLoanTotals } from '@/lib/emi';
 
 const field = { height: 52, borderRadius: 16, backgroundColor: colors.canvas, borderWidth: 1, borderColor: colors.borderStrong, paddingHorizontal: 14, fontFamily: font.semibold, fontSize: 15, color: colors.text } as const;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -36,13 +36,19 @@ export default function NewLoan() {
   const tenureValue = parseInt(tenure, 10) || 0;
   const dueDayValue = parseInt(dueDay, 10);
   const dueDayOk = Number.isInteger(dueDayValue) && dueDayValue >= 1 && dueDayValue <= 31;
+  const monthOk = MONTH_RE.test(startMonth);
 
   const totals = useMemo(
     () => computeLoanTotals(toPaise(principalValue || 0), rateValue, tenureValue),
     [principalValue, rateValue, tenureValue],
   );
 
-  const monthOk = MONTH_RE.test(startMonth);
+  const previewRows = useMemo(() => {
+    const p = toPaise(principalValue || 0);
+    if (!(p > 0) || !(tenureValue >= 1) || !(rateValue >= 0) || rateValue > 100 || !monthOk) return [];
+    return buildSchedule({ id: 'preview', principalPaise: p, annualRatePct: rateValue, tenureMonths: tenureValue, startMonth }, []).slice(0, 3);
+  }, [principalValue, rateValue, tenureValue, startMonth, monthOk]);
+
   const ok = name.trim().length > 0 && principalValue > 0 && rateValue >= 0 && tenureValue >= 1 && monthOk && dueDayOk;
 
   const save = () => {
@@ -68,18 +74,18 @@ export default function NewLoan() {
   };
 
   return (
-    <Sheet footer={<SheetActions primaryLabel={editing ? 'Save changes' : 'Add loan'} onPrimary={save} disabled={!ok} />}>
+    <Sheet style={{ flex: 1 }} footer={<SheetActions primaryLabel={editing ? 'Save changes' : 'Add loan'} onPrimary={save} disabled={!ok} />}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingBottom: 8 }} style={{ flex: 1, flexShrink: 1 }}>
           <AppText variant="heading" style={{ fontSize: 22 }}>{editing ? 'Edit loan' : 'Add loan'}</AppText>
 
           <View style={{ gap: 8 }}>
             <AppText variant="label" color={colors.muted}>QUICK PICK</AppText>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
               {['Home loan', 'Car loan', 'Personal loan', 'Education loan', 'Other'].map((c) => (
                 <Chip key={c} label={c} selected={name === c} onPress={() => setName(c)} />
               ))}
-            </View>
+            </ScrollView>
           </View>
 
           <View style={{ gap: 6 }}>
@@ -102,20 +108,20 @@ export default function NewLoan() {
               <TextInput accessibilityLabel="Tenure in months" value={tenure} onChangeText={(t) => setTenure(t.replace(/[^0-9]/g, '').slice(0, 3))} placeholder="Months" placeholderTextColor={colors.muted} keyboardType="number-pad" style={field} />
             </View>
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
             {TENURES.map((t) => (
               <Chip key={t} label={`${t} mo`} selected={tenure === String(t)} onPress={() => setTenure(String(t))} />
             ))}
-          </View>
+          </ScrollView>
 
           <View style={{ gap: 8 }}>
             <AppText variant="label" color={colors.muted}>EMI DUE DAY</AppText>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 8, alignItems: 'center', paddingRight: 4 }}>
               {[1, 5, 10, 15, 28].map((d) => (
                 <Chip key={d} label={String(d)} selected={dueDay === String(d)} onPress={() => setDueDay(String(d))} />
               ))}
               <TextInput accessibilityLabel="EMI due day, 1 to 31" value={dueDay} onChangeText={(t) => setDueDay(t.replace(/[^0-9]/g, '').slice(0, 2))} placeholder="Day" placeholderTextColor={colors.muted} keyboardType="number-pad" style={[field, { width: 72, textAlign: 'center' }, !dueDayOk && { borderColor: colors.danger }]} />
-            </View>
+            </ScrollView>
             <AppText variant="caption" color={dueDayOk ? colors.muted : colors.danger} style={{ fontSize: 12 }}>{dueDayOk ? 'Day of the month the EMI falls due (1–31).' : 'Enter a day between 1 and 31.'}</AppText>
           </View>
 
@@ -137,6 +143,18 @@ export default function NewLoan() {
               <AppText variant="caption" color={colors.onInkMuted}>Total payable</AppText>
               <Money paise={totals.totalPayable} variant="subheading" color={colors.mint} />
             </View>
+            {previewRows.length ? (
+              <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 8, gap: 6 }}>
+                <AppText variant="caption" color={colors.onInkMuted}>FIRST 3 INSTALLMENTS</AppText>
+                {previewRows.map((r) => (
+                  <View key={r.month} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <AppText variant="caption" color={colors.white} style={{ width: 72 }} numberOfLines={1}>{labelMonth(r.month)}</AppText>
+                    <AppText variant="caption" color={colors.onInkMuted} style={{ flex: 1 }} numberOfLines={1}>Int {formatINR(r.interest)} · Prin {formatINR(r.principal)}</AppText>
+                    <Money paise={r.emi} variant="caption" color={colors.mint} />
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </Card>
 
           {/* Track EMI payments as expenses in the ledger */}

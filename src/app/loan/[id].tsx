@@ -76,8 +76,7 @@ export default function LoanDetail() {
 
   if (!loan || !ov) {
     return (
-      <Screen tabBar={false}>
-        <ScreenHeader title="Loan" back />
+      <Screen tabBar={false} header={<ScreenHeader title="Loan" back />}>
         <AppText color={colors.muted}>Loan not found.</AppText>
       </Screen>
     );
@@ -168,8 +167,10 @@ export default function LoanDetail() {
   };
 
   return (
-    <Screen tabBar={false}>
-      <ScreenHeader title={loan.name} back subtitle={`${loan.annualRatePct}% p.a. · ${loan.tenureMonths} months`} right={<Button variant="outline" label="Edit" height={40} onPress={() => router.push({ pathname: '/loan-new', params: { id: loan.id } })} style={{ paddingHorizontal: 16, borderRadius: 20 }} />} />
+    <Screen
+      tabBar={false}
+      header={<ScreenHeader title={loan.name} back subtitle={`${loan.annualRatePct}% p.a. · ${loan.tenureMonths} months`} right={<Button variant="outline" label="Edit" height={40} onPress={() => router.push({ pathname: '/loan-new', params: { id: loan.id } })} style={{ paddingHorizontal: 16, borderRadius: 20 }} />} />}
+    >
 
       {/* Ink hero */}
       <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 10 }}>

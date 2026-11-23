@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { colors, font } from '@/theme';
+import { colors, font, hit } from '@/theme';
 import { Sheet } from '@/components/ui/Sheet';
 import { SheetActions } from '@/components/ui/SheetActions';
 import { AppText } from '@/components/ui/AppText';
@@ -92,12 +93,43 @@ export default function AddEntry() {
           </View>
 
           <AppText variant="label" color={colors.muted}>CATEGORY</AppText>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {cats.map((c) => <Chip key={c} label={c} selected={category === c} onPress={() => setCategory(c)} />)}
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TextInput accessibilityLabel="New category" value={newCat} onChangeText={setNewCat} placeholder="New category" placeholderTextColor={colors.muted} style={[field, { flex: 1 }]} />
-            <Button label="Add" variant="outline" disabled={!newCat.trim()} onPress={() => { setCategory(newCat.trim()); setNewCat(''); }} style={{ paddingHorizontal: 18 }} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: 8, paddingRight: 4 }}
+          >
+            {cats.map((c) => (
+              <Chip key={c} label={c} selected={category === c} height={36} onPress={() => setCategory(c)} style={{ width: 112 }} />
+            ))}
+          </ScrollView>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <TextInput
+              accessibilityLabel="New category"
+              value={newCat}
+              onChangeText={setNewCat}
+              placeholder="New category"
+              placeholderTextColor={colors.muted}
+              style={[field, { flex: 1 }]}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add category"
+              disabled={!newCat.trim()}
+              onPress={() => { setCategory(newCat.trim()); setNewCat(''); }}
+              style={({ pressed }) => ({
+                width: hit,
+                height: hit,
+                borderRadius: 16,
+                backgroundColor: colors.primary,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: !newCat.trim() ? 0.45 : pressed ? 0.82 : 1,
+                transform: [{ scale: pressed ? 0.96 : 1 }],
+              })}
+            >
+              <Feather name="plus" size={20} color={colors.white} />
+            </Pressable>
           </View>
 
           {kind === 'actual' ? (

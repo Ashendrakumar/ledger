@@ -1,12 +1,20 @@
 import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { ComponentProps } from 'react';
-import { router, type Tabs } from 'expo-router';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font } from '@/theme';
 import { AppText } from './ui/AppText';
 
-type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
+type TabRoute = { key: string; name: string; params?: object };
+type TabNav = {
+  emit?: (event: { type: 'tabPress'; target: string; canPreventDefault: boolean }) => { defaultPrevented?: boolean } | undefined;
+  navigate?: (name: string, params?: object) => void;
+};
+type TabBarProps = {
+  state: { index: number; routes: TabRoute[] };
+  descriptors?: Record<string, { navigation?: TabNav }>;
+  navigation?: TabNav;
+};
 
 const TABS: Record<string, { label: string; filled: React.ComponentProps<typeof Ionicons>['name']; outline: React.ComponentProps<typeof Ionicons>['name'] }> = {
   index: { label: 'Home', filled: 'home', outline: 'home-outline' },
@@ -16,7 +24,7 @@ const TABS: Record<string, { label: string; filled: React.ComponentProps<typeof 
 };
 
 /** Floating dark pill with a raised mint + button in the centre. Active tab = filled icon, no background. */
-export function TabBar({ state, navigation }: BottomTabBarProps) {
+export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const routes = state.routes.filter((r) => TABS[r.name]);
   const left = routes.slice(0, 2), right = routes.slice(2);
@@ -25,6 +33,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
     const focused = state.routes[state.index]?.name === r.name;
     const t = TABS[r.name];
     const color = focused ? colors.mint : colors.onInkMuted;
+    const routeNav = descriptors?.[r.key]?.navigation ?? navigation;
     return (
       <Pressable
         key={r.key}
@@ -32,8 +41,14 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
         accessibilityState={{ selected: focused }}
         accessibilityLabel={t.label}
         onPress={() => {
-          const e = navigation.emit({ type: 'tabPress', target: r.key, canPreventDefault: true });
-          if (!focused && !e.defaultPrevented) navigation.navigate(r.name);
+          const event = routeNav?.emit?.({ type: 'tabPress', target: r.key, canPreventDefault: true });
+          if (focused || event?.defaultPrevented) return;
+          if (routeNav?.navigate) {
+            routeNav.navigate(r.name, r.params);
+          } else {
+            const href = r.name === 'index' ? '/(tabs)' : `/(tabs)/${r.name}`;
+            router.navigate(href as never);
+          }
         }}
         style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center', gap: 3 }}
       >
