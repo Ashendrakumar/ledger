@@ -27,32 +27,38 @@ export async function canAuthenticate(): Promise<boolean> {
 export function AppLockGate() {
   const enabled = useSettings((s) => s.appLock);
   const signedIn = useAuth((s) => !!s.user);
-  const [locked, setLocked] = useState(true); // closed until settings are read, so nothing flashes
+  const [unlocked, setUnlocked] = useState(false);
   const [hydrated, setHydrated] = useState(useSettings.persist.hasHydrated());
   const busy = useRef(false);
   const active = enabled && signedIn;
+  // The cover is derived rather than stored: once settings are known, the lock is
+  // up whenever the lock is active, unless the user just unlocked it.
+  const locked = hydrated && active && !unlocked;
+  // A stale unlock is dropped when the lock becomes active again.
+  const [prevActive, setPrevActive] = useState(active);
+  if (active !== prevActive) {
+    setPrevActive(active);
+    if (unlocked) setUnlocked(false);
+  }
 
   useEffect(() => {
     if (hydrated) return;
     return useSettings.persist.onFinishHydration(() => setHydrated(true));
   }, [hydrated]);
 
-  // Decide initial state once settings are known.
-  useEffect(() => { if (hydrated) setLocked(active); }, [hydrated, active]);
-
   useEffect(() => {
     if (!active) return;
-    const sub = AppState.addEventListener('change', (s) => { if (s === 'background') setLocked(true); });
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'background') setUnlocked(false); });
     return () => sub.remove();
   }, [active]);
 
   const unlock = useCallback(async () => {
     if (busy.current) return;
     busy.current = true;
-    try { if (await authenticate()) setLocked(false); } finally { busy.current = false; }
+    try { if (await authenticate()) setUnlocked(true); } finally { busy.current = false; }
   }, []);
 
-  useEffect(() => { if (hydrated && locked && active) unlock(); }, [hydrated, locked, active, unlock]);
+  useEffect(() => { if (locked) unlock(); }, [locked, unlock]);
 
   if (!hydrated || !locked || !active) return null;
   return (

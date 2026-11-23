@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, TextInput, View } from 'react-native';
+import { Alert, Pressable, SectionList, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import { colors, font, radius } from '@/theme';
@@ -11,16 +11,18 @@ import { Card } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Segmented } from '@/components/ui/Segmented';
+import { DateField } from '@/components/ui/DateField';
+import { LoanPaymentSheet } from '@/components/LoanPaymentSheet';
+import { LoanForeclosureSheet } from '@/components/LoanForeclosureSheet';
 import { useLoans } from '@/store/loans';
 import { useEntries } from '@/store/entries';
 import { getLoanOverview, dueDayOf } from '@/lib/emi';
 import { formatINR, toPaise } from '@/lib/money';
 import { labelMonth, todayISO } from '@/lib/dates';
 import type { LoanScheduleRow, RowStatus } from '@/lib/emi';
-import type { PaymentKind } from '@/types';
+import type { LoanPayment, PaymentKind } from '@/types';
 
 const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-const SCHEDULE_PREVIEW = 26;
 
 const STATUS_META: Record<RowStatus, { icon: React.ComponentProps<typeof Feather>['name']; fg: string; bg: string; label: string }> = {
   paid:     { icon: 'check',        fg: colors.savings, bg: colors.savingsTint, label: 'Paid' },
@@ -42,14 +44,14 @@ function FactRow({ label, value, last }: { label: string; value: string; last?: 
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 46, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: last ? 0 : 1, borderTopColor: colors.border }}>
       <AppText variant="body">{label}</AppText>
-      <AppText variant="subheading" style={{ fontSize: 14 }}>{value}</AppText>
+      <AppText variant="subheading">{value}</AppText>
     </View>
   );
 }
 
 function StatTile({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <View style={{ flex: 1, backgroundColor: colors.canvas, borderRadius: 18, padding: 12, gap: 2 }}>
+    <View style={{ flex: 1, backgroundColor: colors.canvas, borderRadius: 16, padding: 12, gap: 2 }}>
       <AppText variant="caption" color={colors.muted} style={{ fontSize: 11 }}>{label}</AppText>
       <AppText variant="subheading" style={{ fontSize: 15, color }} numberOfLines={1}>{value}</AppText>
     </View>
@@ -70,9 +72,9 @@ export default function LoanDetail() {
   const [segment, setSegment] = useState<'actual' | 'planned'>('actual');
   const [amount, setAmount] = useState(emiDefault);
   const [date, setDate] = useState(todayISO());
-  const [editingMonth, setEditingMonth] = useState<string | null>(null);
+  const [sheetMonth, setSheetMonth] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('schedule');
-  const [showAll, setShowAll] = useState(false);
+  const [showForeclosure, setShowForeclosure] = useState(false);
 
   if (!loan || !ov) {
     return (
@@ -84,29 +86,21 @@ export default function LoanDetail() {
 
   const rows = ov.schedule;
   const next = ov.nextDue;
+  const targetMonth = next?.month;
+  const existing = sheetMonth ? payments.find((p) => p.loanId === loan.id && p.month === sheetMonth) : undefined;
   const loanPayments = payments.filter((p) => p.loanId === loan.id).sort((a, b) => b.month.localeCompare(a.month) || (b.date ?? '').localeCompare(a.date ?? ''));
-  const targetMonth = editingMonth ?? next?.month;
-  const targetPayment = editingMonth ? payments.find((p) => p.loanId === loan.id && p.month === editingMonth) : undefined;
-  const nextPayment = next ? payments.find((p) => p.loanId === loan.id && p.month === next.month) : undefined;
-  const visible = showAll ? rows : rows.slice(0, SCHEDULE_PREVIEW);
   const interestPaid = rows.filter((r) => r.paid || r.closed).reduce((a, r) => a + r.interest, 0);
   const payoffMonth = ov.closedIn ?? rows[rows.length - 1]?.month;
 
-  const startEdit = (r: LoanScheduleRow) => {
-    const p = payments.find((x) => x.loanId === loan.id && x.month === r.month);
-    setEditingMonth(r.month);
-    setSegment(p?.kind === 'planned' ? 'planned' : 'actual');
-    setAmount(p ? String(p.amountPaise / 100) : String(loan.emiPaise / 100));
-    setDate(p?.date ?? todayISO());
-    setTab('schedule');
-  };
-
-  const cancelEdit = () => {
-    setEditingMonth(null);
-    setSegment('actual');
-    setAmount(emiDefault);
-    setDate(todayISO());
-  };
+  // Schedule sections for the virtualized list: Paid (closed/settled) and Upcoming (the rest).
+  const sections: { title: string; data: LoanScheduleRow[] }[] = (() => {
+    const paid = rows.filter((r) => r.status === 'paid' || r.status === 'closed');
+    const rest = rows.filter((r) => r.status !== 'paid' && r.status !== 'closed');
+    const out: { title: string; data: LoanScheduleRow[] }[] = [];
+    if (paid.length) out.push({ title: `Paid · ${paid.length}`, data: paid });
+    if (rest.length) out.push({ title: `Upcoming · ${rest.length}`, data: rest });
+    return out;
+  })();
 
   const logExpenseFor = (paymentId: string, amountPaise: number, month: string, payDate?: string) => {
     if (!loan.trackExpenses) return;
@@ -127,26 +121,37 @@ export default function LoanDetail() {
     if (loan.trackExpenses) removeLoanPaymentEntries([paymentId]);
   };
 
-  const save = () => {
+  const recordNew = () => {
     const v = parseFloat(amount);
-    const month = editingMonth ?? next?.month;
+    const month = targetMonth;
     if (!month || !(v > 0)) return;
     if (segment === 'actual' && !DATE_RE.test(date)) {
       Alert.alert('Invalid date', 'Use the format YYYY-MM-DD.');
       return;
     }
     const paid = markPayment({ loanId: loan.id, month, amountPaise: toPaise(v), kind: segment, date: segment === 'actual' ? date : undefined });
-    // Editing an existing payment replaces it — drop its ledger twin, then re-log if actual.
-    if (targetPayment) removeLoanPaymentEntries([targetPayment.id]);
-    if (paid.kind === 'actual') logExpenseFor(paid.id, paid.amountPaise, paid.month, paid.date);
-    if (editingMonth) cancelEdit();
+    logExpenseFor(paid.id, paid.amountPaise, paid.month, paid.date);
   };
 
-  const delPayment = () => {
-    if (!targetPayment || !editingMonth) return;
-    Alert.alert('Delete this payment?', `${formatINR(targetPayment.amountPaise)} recorded for ${labelMonth(editingMonth)} will be removed.`, [
+  const onSheetSave = (seg: PaymentKind, amt: string, payDate: string) => {
+    const v = parseFloat(amt);
+    const month = sheetMonth ?? next?.month;
+    if (!month || !(v > 0)) return;
+    if (seg === 'actual' && !DATE_RE.test(payDate)) {
+      Alert.alert('Invalid date', 'Use the format YYYY-MM-DD.');
+      return;
+    }
+    const paid = markPayment({ loanId: loan.id, month, amountPaise: toPaise(v), kind: seg, date: seg === 'actual' ? payDate : undefined });
+    const twin = payments.find((x) => x.loanId === loan.id && x.month === month);
+    if (twin) removeLoanPaymentEntries([twin.id]);
+    if (paid.kind === 'actual') logExpenseFor(paid.id, paid.amountPaise, paid.month, paid.date);
+    setSheetMonth(null);
+  };
+
+  const onSheetDelete = (p: LoanPayment) => {
+    Alert.alert('Delete this payment?', `${formatINR(p.amountPaise)} recorded for ${labelMonth(p.month)} will be removed.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { removePaymentAndExpense(targetPayment.id); cancelEdit(); } },
+      { text: 'Delete', style: 'destructive', onPress: () => { removePaymentAndExpense(p.id); setSheetMonth(null); } },
     ]);
   };
 
@@ -173,14 +178,14 @@ export default function LoanDetail() {
     >
 
       {/* Ink hero */}
-      <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 10 }}>
+      <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 12 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <View style={{ flex: 1, gap: 2 }}>
             <AppText variant="caption" color={colors.onInkMuted}>Loan outstanding</AppText>
             <Money paise={ov.outstanding} variant="display" color={colors.white} style={{ fontSize: 30 }} />
           </View>
           {next ? (
-            <View style={{ alignItems: 'flex-end', gap: 2 }}>
+            <View style={{ alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
               <AppText variant="caption" color={colors.onInkMuted}>NEXT DUE</AppText>
               <AppText variant="subheading" color={colors.mint} style={{ fontSize: 16 }}>{dueDayOf(loan)} {labelMonth(next.month)}</AppText>
             </View>
@@ -193,16 +198,21 @@ export default function LoanDetail() {
         </View>
       </View>
 
-      {/* Record / edit payment */}
-      <Card style={{ gap: 12 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <AppText variant="subheading">{editingMonth ? `Edit payment — ${labelMonth(editingMonth)}` : 'Record payment'}</AppText>
-          {editingMonth ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Stop editing" onPress={cancelEdit} hitSlop={8}>
-              <AppText variant="subheading" color={colors.primary}>Done</AppText>
-            </Pressable>
-          ) : null}
+      {/* Stats summary */}
+      <Card style={{ padding: 12, gap: 12 }}>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <StatTile label="PRINCIPAL PAID" value={formatINR(ov.repaid)} color={colors.savingsText} />
+          <StatTile label="INTEREST PAID" value={formatINR(interestPaid)} color={colors.expenseText} />
         </View>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <StatTile label="INTEREST REMAINING" value={formatINR(ov.remainingInterest)} color={colors.expenseText} />
+          <StatTile label="PAYOFF" value={payoffMonth ? labelMonth(payoffMonth) : '—'} color={colors.text} />
+        </View>
+      </Card>
+
+      {/* Record payment card (new payments; row-tap on the schedule opens the sheet) */}
+      <Card style={{ gap: 12 }}>
+        <AppText variant="subheading">Record payment</AppText>
         <Segmented options={[{ value: 'actual', label: 'Actual' }, { value: 'planned', label: 'Planned' }]} value={segment} onChange={setSegment} />
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <View style={{ flex: 1, gap: 2 }}>
@@ -220,47 +230,32 @@ export default function LoanDetail() {
           {segment === 'actual' ? (
             <View style={{ flex: 1, gap: 2 }}>
               <AppText variant="label" color={colors.muted} style={{ fontSize: 11 }}>DATE</AppText>
-              <TextInput
-                accessibilityLabel="Payment date, year-month-day"
-                value={date}
-                onChangeText={setDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.muted}
-                maxLength={10}
-                style={{ height: 48, borderRadius: 14, backgroundColor: colors.canvas, borderWidth: 1, borderColor: DATE_RE.test(date) ? colors.borderStrong : colors.danger, paddingHorizontal: 14, fontFamily: font.semibold, fontSize: 15, color: colors.text }}
-              />
+              <DateField value={date} onChange={setDate} accessibilityLabel="Choose payment date" invalid={!DATE_RE.test(date)} />
             </View>
           ) : null}
         </View>
         {targetMonth ? (
-          <AppText variant="caption" color={colors.muted} style={{ fontSize: 12 }}>Counts toward the {labelMonth(targetMonth)} installment{targetPayment ? ' · replaces the payment already recorded' : ''}{loan.trackExpenses && segment === 'actual' ? ' · logged as expense' : ''}</AppText>
+          <AppText variant="caption" color={colors.muted} style={{ fontSize: 12 }}>Counts toward the {labelMonth(targetMonth)} installment{loan.trackExpenses && segment === 'actual' ? ' · logged as expense' : ''}</AppText>
         ) : (
           <AppText variant="caption" color={colors.savings}>This loan is fully repaid.</AppText>
         )}
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          {editingMonth && targetPayment ? (
-            <View style={{ flex: 1 }}>
-              <Button label="Delete" height={52} variant="danger" onPress={delPayment} />
-            </View>
-          ) : null}
           <View style={{ flex: 1.4 }}>
-            <Button label={editingMonth ? 'Save changes' : 'Record payment'} height={52} disabled={!targetMonth || !parseFloat(amount)} onPress={save} />
+            <Button label="Record payment" height={52} disabled={!parseFloat(amount)} onPress={recordNew} />
           </View>
         </View>
-        {!editingMonth && nextPayment ? (
-          <Button label="Undo payment" height={44} variant="ghost" onPress={() => removePaymentAndExpense(nextPayment.id)} />
+        {next ? (
+          <Button
+            label="Undo last payment"
+            height={44}
+            variant="ghost"
+            onPress={() => {
+              const p = payments.find((x) => x.loanId === loan.id && x.month === next.month);
+              if (p) removePaymentAndExpense(p.id);
+            }}
+          />
         ) : null}
       </Card>
-
-      {/* Stat tiles */}
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <StatTile label="PRINCIPAL PAID" value={formatINR(ov.repaid)} color={colors.savingsText} />
-        <StatTile label="INTEREST PAID" value={formatINR(interestPaid)} color={colors.expenseText} />
-      </View>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <StatTile label="INTEREST REMAINING" value={formatINR(ov.remainingInterest)} color={colors.expenseText} />
-        <StatTile label="PAYOFF" value={payoffMonth ? labelMonth(payoffMonth) : '—'} color={colors.text} />
-      </View>
 
       {/* Loan facts */}
       <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -275,41 +270,46 @@ export default function LoanDetail() {
       <Segmented options={[{ value: 'schedule', label: `Schedule` }, { value: 'payments', label: `Payments (${loanPayments.length})` }]} value={tab} onChange={setTab} />
 
       {tab === 'schedule' ? (
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          {visible.map((r, i) => {
-            const meta = STATUS_META[r.status];
+        <SectionList
+          sections={sections}
+          keyExtractor={(r) => r.month}
+          renderItem={({ item, index }) => {
+            const meta = STATUS_META[item.status];
             return (
               <Pressable
-                key={r.month}
                 accessibilityRole="button"
-                accessibilityLabel={`${labelMonth(r.month)} installment, ${meta.label}`}
-                onPress={() => startEdit(r)}
-                style={{ gap: 6, paddingVertical: 12, paddingHorizontal: 16, borderTopWidth: i ? 1 : 0, borderTopColor: colors.border }}
+                accessibilityLabel={`${labelMonth(item.month)} installment, ${meta.label}`}
+                onPress={() => setSheetMonth(item.month)}
+                style={{ gap: 6, paddingVertical: 12, paddingHorizontal: 16, borderTopWidth: index ? 1 : 0, borderTopColor: colors.border }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: meta.bg, alignItems: 'center', justifyContent: 'center' }}>
-                    <Feather name={meta.icon} size={16} color={meta.fg} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+                  <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: meta.bg, alignItems: 'center', justifyContent: 'center' }}>
+                      <Feather name={meta.icon} size={16} color={meta.fg} />
+                    </View>
+                    <AppText variant="subheading" numberOfLines={1}>{labelMonth(item.month)}</AppText>
+                    <AppText variant="caption" color={meta.fg} style={{ fontSize: 10, fontFamily: 'PlusJakartaSans_700Bold' }}>{meta.label.toUpperCase()}</AppText>
                   </View>
-                  <AppText variant="subheading" style={{ flex: 1 }}>{labelMonth(r.month)}</AppText>
-                  <AppText variant="caption" color={meta.fg} style={{ fontSize: 10, fontFamily: 'PlusJakartaSans_700Bold' }}>{meta.label.toUpperCase()}</AppText>
-                  <Money paise={r.emi} variant="subheading" style={{ fontFamily: 'PlusJakartaSans_800ExtraBold' }} />
+                  <Money paise={item.emi} variant="subheading" style={{ fontFamily: 'PlusJakartaSans_800ExtraBold' }} />
                 </View>
-                {r.status !== 'closed' ? (
+                {item.status !== 'closed' ? (
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 44 }}>
-                    <AppText variant="caption" color={colors.muted} style={{ fontSize: 12 }}>Interest {formatINR(r.interest)}</AppText>
-                    <AppText variant="caption" color={colors.savings} style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_700Bold' }}>Principal {formatINR(r.principal)}</AppText>
+                    <AppText variant="caption" color={colors.muted} style={{ fontSize: 12 }}>Interest {formatINR(item.interest)}</AppText>
+                    <AppText variant="caption" color={colors.savings} style={{ fontSize: 12, fontFamily: 'PlusJakartaSans_700Bold' }}>Principal {formatINR(item.principal)}</AppText>
                   </View>
                 ) : null}
               </Pressable>
             );
-          })}
-          {!showAll && rows.length > SCHEDULE_PREVIEW ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Show all installments" onPress={() => setShowAll(true)}
-              style={{ minHeight: 48, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: colors.border }}>
-              <AppText variant="subheading" color={colors.primary}>Show all {rows.length} installments</AppText>
-            </Pressable>
-          ) : null}
-        </Card>
+          }}
+          renderSectionHeader={({ section: { title } }) => (
+            <View style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
+              <View style={{ alignSelf: 'flex-start', backgroundColor: colors.track, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
+                <AppText variant="caption" color={colors.muted} style={{ fontSize: 10, fontFamily: 'PlusJakartaSans_800ExtraBold' }}>{title}</AppText>
+              </View>
+            </View>
+          )}
+          ListEmptyComponent={<View style={{ padding: 16 }}><AppText color={colors.muted}>This schedule is complete.</AppText></View>}
+        />
       ) : (
         <Card style={{ padding: 0, overflow: 'hidden' }}>
           {loanPayments.length === 0 ? (
@@ -321,10 +321,7 @@ export default function LoanDetail() {
                 key={p.id}
                 accessibilityRole="button"
                 accessibilityLabel={`Payment for ${labelMonth(p.month)}, ${k.label}, ${formatINR(p.amountPaise)}`}
-                onPress={() => {
-                  const r = rows.find((x) => x.month === p.month);
-                  if (r && p.kind !== 'prepayment') startEdit(r);
-                }}
+                onPress={() => { if (p.kind !== 'prepayment') setSheetMonth(p.month); }}
                 style={{ gap: 2, paddingVertical: 12, paddingHorizontal: 16, borderTopWidth: i ? 1 : 0, borderTopColor: colors.border }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -340,7 +337,22 @@ export default function LoanDetail() {
         </Card>
       )}
 
-      <Button label="Make prepayment" variant="outline" height={48} icon={<Feather name="zap" size={17} color={colors.primary} />} onPress={() => router.push({ pathname: '/loan-prepay', params: { id: loan.id } })} />
+      <LoanPaymentSheet
+        key={sheetMonth}
+        loan={loan}
+        month={sheetMonth}
+        existing={existing}
+        onSave={onSheetSave}
+        onDelete={onSheetDelete}
+        onClose={() => setSheetMonth(null)}
+      />
+
+      {showForeclosure ? <LoanForeclosureSheet loan={loan} ov={ov} onClose={() => setShowForeclosure(false)} /> : null}
+
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Button label="Make prepayment" style={{ flex: 1 }} variant="outline" height={48} icon={<Feather name="zap" size={17} color={colors.primary} />} onPress={() => router.push({ pathname: '/loan-prepay', params: { id: loan.id } })} />
+        <Button label="Close early" variant="outline" height={48} onPress={() => setShowForeclosure(true)} />
+      </View>
       <Button label="Delete loan" variant="danger" height={48} onPress={delLoan} />
     </Screen>
   );

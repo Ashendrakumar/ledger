@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors, radius } from '@/theme';
@@ -8,7 +8,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
 import { Sparkline } from '@/components/charts/Sparkline';
-import { EntryRow } from '@/components/EntryRow';
+import { EntryRow, typeStyle } from '@/components/EntryRow';
 import { PlanActualCard } from '@/components/PlanActualCard';
 import { MonthMenu } from '@/components/MonthMenu';
 import { useEntries } from '@/store/entries';
@@ -21,6 +21,8 @@ import { fullMonth, shiftMonth, shortMonth, labelMonth } from '@/lib/dates';
 import { formatINR } from '@/lib/money';
 
 export default function Home() {
+  const { width: screenWidth } = useWindowDimensions();
+  const overviewCardWidth = (screenWidth - 32) * 0.9;
   const entries = useEntries((s) => s.entries);
   const { month, setMonth } = useUi();
   const loans = useLoans((s) => s.loans);
@@ -30,11 +32,27 @@ export default function Home() {
 
   const d = useMemo(() => {
     const t = (kind: 'actual' | 'planned', type: 'income' | 'expense' | 'saving') => total(entries, month, kind, type);
+    const monthlyTrend = (type: 'income' | 'expense' | 'saving') => Array.from({ length: 6 }, (_, i) => total(entries, shiftMonth(month, i - 5), 'actual', type));
+    const previousMonth = shiftMonth(month, -1);
+    const actualIncome = t('actual', 'income');
+    const incomeSharePct = (amount: number) => actualIncome > 0 ? Math.round((amount / actualIncome) * 100) : 0;
+    const expenseActual = t('actual', 'expense');
+    const expensePlanned = t('planned', 'expense');
+    const savingsActual = t('actual', 'saving');
+    const savingsPlanned = t('planned', 'saving');
+    const variancePct = (actual: number, planned: number) => planned > 0 ? Math.round(((actual - planned) / planned) * 100) : null;
     const recent = entries.filter((e) => e.kind === 'actual' && e.month === month).sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '')).slice(0, 4);
     return {
       bal: balance(entries), trend: balanceTrend(entries, month),
+      incomeTrend: monthlyTrend('income'), expenseTrend: monthlyTrend('expense'), savingsTrend: monthlyTrend('saving'),
+      incomeChange: t('actual', 'income') - total(entries, previousMonth, 'actual', 'income'),
+      expenseChange: t('actual', 'expense') - total(entries, previousMonth, 'actual', 'expense'),
+      savingsChange: t('actual', 'saving') - total(entries, previousMonth, 'actual', 'saving'),
+      incomeSharePct: { income: incomeSharePct(actualIncome), expense: incomeSharePct(t('actual', 'expense')), savings: incomeSharePct(t('actual', 'saving')) },
       plannedOut: t('planned', 'expense') + t('planned', 'saving'),
       actualOut: t('actual', 'expense') + t('actual', 'saving'),
+      expenseVariance: { amount: expenseActual - expensePlanned, pct: variancePct(expenseActual, expensePlanned) },
+      savingsVariance: { amount: savingsActual - savingsPlanned, pct: variancePct(savingsActual, savingsPlanned) },
       change: t('actual', 'income') - t('actual', 'expense') - t('actual', 'saving'),
       inc: [t('actual', 'income'), t('planned', 'income')], exp: [t('actual', 'expense'), t('planned', 'expense')], sav: [t('actual', 'saving'), t('planned', 'saving')],
       recent,
@@ -94,6 +112,10 @@ export default function Home() {
           <Feather name="chevron-down" size={15} color={colors.text} />
         </Pressable>
       </View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push('/settings')}
+        style={{ width: 42, height: 46, alignItems: 'center', justifyContent: 'center' }}>
+        <Feather name="settings" size={20} color={colors.text} />
+      </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={overdue > 0 ? `Alerts, ${overdue} overdue EMI${overdue === 1 ? '' : 's'}` : 'Alerts'} onPress={onBell}
         style={{ width: 46, height: 46, marginRight: -8, alignItems: 'center', justifyContent: 'center' }}>
         <Feather name="bell" size={22} color={colors.text} />
@@ -110,20 +132,20 @@ export default function Home() {
       <MonthMenu visible={monthMenu} month={month} onChange={setMonth} onClose={() => setMonthMenu(false)} />
 
       {/* Overview */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <AppText variant="heading">Overview</AppText>
         <Pressable accessibilityRole="link" accessibilityLabel="See the full plan" onPress={() => router.navigate('/plan')} style={{ flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 44 }}>
           <AppText variant="caption" color={colors.muted}>Swipe for more</AppText>
           <Feather name="chevron-right" size={14} color={colors.muted} />
         </Pressable>
-      </View>
+      </View> */}
       <ScrollView
         horizontal
         nestedScrollEnabled
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ gap: 12, paddingRight: 2 }}
       >
-        <View style={{ width: 300, backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 10 }}>
+        <View style={{ width: overviewCardWidth, backgroundColor: colors.ink, borderRadius: radius.hero, padding: 14, gap: 7 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <AppText variant="caption" color={colors.onInkMuted}>Total balance</AppText>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: d.change >= 0 ? 'rgba(95,211,181,0.16)' : 'rgba(255,156,143,0.14)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
@@ -134,35 +156,57 @@ export default function Home() {
           </View>
           <Money paise={d.bal} variant="display" color={colors.white} />
           <View style={{ marginTop: 2 }}>
-            <Sparkline values={d.trend} width={264} height={44} />
+            <Sparkline values={d.trend} width={overviewCardWidth - 28} height={32} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2, marginTop: 4 }}>
               {trendMonths.map((m, i) => (
                 <AppText key={i} variant="caption" color={colors.onInkMuted} style={{ fontSize: 10 }}>{m}</AppText>
               ))}
             </View>
           </View>
-          <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 10 }}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <AppText variant="caption" color={colors.onInkMuted}>Planned (spend + savings)</AppText>
-              <Money paise={d.plannedOut} variant="subheading" color={colors.white} />
+          <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 7, gap: 6 }}>
+            <View style={{ flexDirection: 'row' }}>
+              <View style={{ flex: 1, gap: 3 }}>
+                <Money paise={d.plannedOut} variant="subheading" color={colors.white} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Feather name="calendar" size={11} color={colors.onInkMuted} />
+                  <AppText variant="caption" color={colors.onInkMuted} style={{ fontSize: 10 }}>Planned</AppText>
+                </View>
+              </View>
+              <View style={{ flex: 1, gap: 3, alignItems: 'flex-end' }}>
+                <Money paise={d.actualOut} variant="subheading" color={colors.white} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                  <Feather name="credit-card" size={11} color={colors.onInkMuted} />
+                  <AppText variant="caption" color={colors.onInkMuted} style={{ fontSize: 10 }}>Actual</AppText>
+                </View>
+              </View>
             </View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <AppText variant="caption" color={colors.onInkMuted}>Spent + saved so far</AppText>
-              <Money paise={d.actualOut} variant="subheading" color={colors.white} />
+            <View style={{ gap: 3 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <AppText variant="caption" color={colors.onInkMuted} style={{ fontSize: 11 }}>Expenses vs plan</AppText>
+                <AppText variant="caption" color={d.expenseVariance.amount <= 0 ? colors.mint : '#FF9C8F'} style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_700Bold' }}>
+                  {formatINR(d.expenseVariance.amount, { sign: true })} · {d.expenseVariance.pct === null ? '—' : `${d.expenseVariance.pct > 0 ? '+' : ''}${d.expenseVariance.pct}%`}
+                </AppText>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <AppText variant="caption" color={colors.onInkMuted} style={{ fontSize: 11 }}>Savings vs plan</AppText>
+                <AppText variant="caption" color={d.savingsVariance.amount >= 0 ? colors.mint : '#FF9C8F'} style={{ fontSize: 11, fontFamily: 'PlusJakartaSans_700Bold' }}>
+                  {formatINR(d.savingsVariance.amount, { sign: true })} · {d.savingsVariance.pct === null ? '—' : `${d.savingsVariance.pct > 0 ? '+' : ''}${d.savingsVariance.pct}%`}
+                </AppText>
+              </View>
             </View>
           </View>
         </View>
 
-        <PlanActualCard label="Income" icon="arrow-down-left" actual={d.inc[0]} planned={d.inc[1]} tint={colors.incomeTint} fg={colors.income} text={colors.income} onPress={() => open('income')} style={{ width: 168 }} />
-        <PlanActualCard label="Expenses" icon="arrow-up-right" actual={d.exp[0]} planned={d.exp[1]} tint={colors.expenseTint} fg={colors.expense} text={colors.expenseText} onPress={() => open('expense')} style={{ width: 168 }} />
-        <PlanActualCard label="Savings" icon="bookmark" actual={d.sav[0]} planned={d.sav[1]} tint={colors.savingsTint} fg={colors.savings} text={colors.savingsText} onPress={() => open('saving')} style={{ width: 168 }} />
+        <PlanActualCard label="Income" icon={typeStyle('income').icon} actual={d.inc[0]} planned={d.inc[1]} tint={colors.incomeTint} fg={colors.income} text={colors.income} trend={d.incomeTrend} trendMonths={trendMonths} change={d.incomeChange} increaseIsGood incomeSharePct={d.incomeSharePct.income} onPress={() => open('income')} style={{ width: overviewCardWidth }} />
+        <PlanActualCard label="Expenses" icon={typeStyle('expense').icon} actual={d.exp[0]} planned={d.exp[1]} tint={colors.expenseTint} fg={colors.expense} text={colors.expenseText} trend={d.expenseTrend} trendMonths={trendMonths} change={d.expenseChange} increaseIsGood={false} incomeSharePct={d.incomeSharePct.expense} onPress={() => open('expense')} style={{ width: overviewCardWidth }} />
+        <PlanActualCard label="Savings" icon={typeStyle('saving').icon} actual={d.sav[0]} planned={d.sav[1]} tint={colors.savingsTint} fg={colors.savings} text={colors.savingsText} trend={d.savingsTrend} trendMonths={trendMonths} change={d.savingsChange} increaseIsGood incomeSharePct={d.incomeSharePct.savings} onPress={() => open('saving')} style={{ width: overviewCardWidth }} />
       </ScrollView>
 
       {/* Loans & EMI */}
       <Pressable accessibilityRole="button" accessibilityLabel="Loans and EMI" onPress={() => router.push('/loans')}
         style={{ backgroundColor: colors.expenseTint, borderRadius: radius.card, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <View style={{ width: 44, height: 44, borderRadius: 15, backgroundColor: 'rgba(184,70,10,0.16)', alignItems: 'center', justifyContent: 'center' }}>
-          <Feather name="percent" size={20} color={colors.expense} />
+          <Feather name="credit-card" size={20} color={colors.expense} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <AppText variant="subheading" style={{ fontSize: 15 }}>Loans & EMI</AppText>

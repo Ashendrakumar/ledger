@@ -8,7 +8,7 @@ import { SheetActions } from '@/components/ui/SheetActions';
 import { AppText } from '@/components/ui/AppText';
 import { Money } from '@/components/ui/Money';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { TYPE_STYLE } from '@/components/EntryRow';
+import { typeStyle } from '@/components/EntryRow';
 import { useEntries } from '@/store/entries';
 import { useUi } from '@/store/ui';
 import { byCategory } from '@/lib/selectors';
@@ -24,7 +24,7 @@ export default function Breakdown() {
   const type = (['expense', 'income', 'saving'].includes(raw) ? raw : 'expense') as EntryType;
   const entries = useEntries((s) => s.entries);
   const month = useUi((s) => s.month);
-  const s = TYPE_STYLE[type];
+  const s = typeStyle(type);
 
   const rows = useMemo(() => byCategory(entries, month, type), [entries, month, type]);
   const planned = rows.reduce((a, r) => a + r.planned, 0);
@@ -33,7 +33,10 @@ export default function Breakdown() {
   return (
     <Sheet footer={<SheetActions primaryLabel="Done" onPrimary={() => router.back()} />}>
       <View style={{ marginBottom: 4 }}>
-        <AppText variant="heading" style={{ fontSize: 22 }}>{TITLES[type]}</AppText>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Feather name={s.icon} size={20} color={s.fg} />
+          <AppText variant="heading" style={{ fontSize: 22 }}>{TITLES[type]}</AppText>
+        </View>
         <AppText variant="caption" color={colors.muted}>{fullMonth(month)} · planned vs actual by category</AppText>
       </View>
 

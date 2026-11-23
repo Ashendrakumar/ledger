@@ -1,6 +1,6 @@
 # Loan & EMI — Complete Plan
 
-**Status:** In progress (partially implemented) — core loan/EMI flows exist; remaining phase items tracked in `docs/TODO.md` and below.
+**Status:** Core implementation complete; notification delivery still needs validation on a development/production build. See `docs/TODO.md` for external follow-ups.
 **Scope:** Data model & EMI math · reminder/overdue logic · Home & Plan integration · all loan screens & flows.
 **Author context:** Current implementation as of 2026-11. Home/Plan/Loans ship most core pieces (see §2) with additional improvements applied after verification.
 
@@ -16,11 +16,9 @@
   - Plan hero: EMI line now shows **“EMI left to pay this month”** as remaining amount plus **“of ₹X due”** context.
   - Home Loans & EMI card: adds **“EMI partially paid · ₹Y left”** state for the selected month when applicable.
 
-**Still pending / gaps vs full plan**
-- P0: automated EMI math/unit tests (e.g. `src/lib/emi` cases in §7/§8) and full acceptance-criteria verification.
-- P1: loan detail schedule virtualization (`FlatList`) and row-tap edit-payment sheet (current UI uses in-screen/inline flows), and any remaining spec copy/state refinements.
-- P2: real-device/dev-build validation of notifications/reminders end-to-end (module wiring done, but behavior must be validated on supported builds; permission/UX edge cases may remain).
-- P3: foreclosure/early-closure summary, CSV export of loans, richer payoff/advanced polish, autopay informational flag (basic prepayment flow exists).
+**Remaining external validation**
+- P2: Confirm notification delivery on an Android/iOS development or production build; Expo Go does not support all native notification behavior.
+- Backend: Deploy and verify the email-code endpoints listed in `docs/TODO.md`.
 
 ---
 
@@ -246,35 +244,34 @@ Roles/labels on every new pressable; status chips are text + icon (never color-o
 ## 8. Implementation phases
 
 ### Phase P0 — Correctness & model (foundation)
-- [ ] Types: `dueDay?`, `PaymentKind` gains `'prepayment'`; `docs` updated.
-- [ ] `ledger.loans` → v2 + migration + rehydrate validation.
-- [ ] `computeEMI` unchanged; `buildSchedule` rewritten: clamp principalApplied to balance; `status` field; early-closed detection (balance 0 ⇒ later rows `paid/skipped`); overpay clamp.
-- [ ] `getLoanOverview()` single selector; migrate all call sites (loans list, detail, home, plan); delete duplicated overdue code.
-- [ ] Row status computation incl. partial; unit tests in `src/lib/emi.test.ts`-style (run via `npx tsx` or node assert): cases from §7 incl. overpay, partial, zero-rate, n=1.
+- [x] Types: `dueDay?`, `PaymentKind` includes `'prepayment'`; docs updated.
+- [x] `ledger.loans` v2 migration and persisted-data validation.
+- [x] `buildSchedule` status, balance clamping, and early-closure handling; math tests cover §7 cases.
+- [x] Loan overview and row status, including partial payments, are shared by screens.
 
 ### Phase P1 — Screens & UX
-- [ ] `/loan-new`: dueDay picker, free tenure, first-3-rows preview, validation copy.
-- [ ] `/loan/[id]`: Record-payment card (segmented + date), stats incl. remaining interest, virtualized schedule, row tap → edit-payment sheet (amount/date/note/kind + delete), delete-loan flow.
-- [ ] `/loans`: next-due line in hero, rows with repaid bar + status chip, completed collapse.
-- [ ] Home card: 4 states §5.5 + conditional bell dot.
-- [ ] Plan: status chips, partial support, hero copy split ("left to pay of due").
-- [ ] Insights: Debt-service card.
-- [ ] Settings: wire `billReminders` (toggle works, copy, no-op safe).
-- [ ] Empty/error/corruption states everywhere; a11y pass.
+- [x] `/loan-new`: dueDay picker, tenure input, first-three-row preview, and validation.
+- [x] `/loan/[id]`: payment entry, remaining-interest stats, virtualized schedule, edit-payment sheet, and delete-loan flow.
+- [x] `/loans`: next-due line, repaid progress/status, and collapsible completed loans.
+- [x] Home card: overdue/paid/partial/upcoming states and conditional alert indicator.
+- [x] Plan: status chips, partial support, and remaining-vs-due amounts.
+- [x] Insights: debt-service card.
+- [x] Settings: `billReminders` permission and scheduling.
+- [x] Persisted loan data is sanitized; interactive controls use accessible labels and touch targets.
 
 ### Phase P2 — Reminders
-- [ ] Add `expo-notifications` + config plugin; run `npx expo install expo-notifications`.
-- [ ] `src/lib/reminders.ts` sync engine + `ledger.reminders` slice; hooks in loans/settings stores (debounced).
-- [ ] Due/then-overdue pair per loan per month; cancel on settle; deep-link tap.
-- [ ] Permission prompt UX (ask on first `billReminders` enable, not at launch); denial → inline hint.
-- [ ] Hide amounts in notification body when `hideAmounts`.
+- [x] Add `expo-notifications` and its config plugin.
+- [x] Reminder sync engine reschedules after loan, payment, and setting changes.
+- [x] Due and pre-due notifications for unsettled installments; taps open loan detail.
+- [x] Ask permission when enabled and show guidance after denial.
+- [x] Omit amounts from notification bodies when amounts are hidden.
 
 ### Phase P3 — Advanced (post-P2)
-- [ ] Prepayment flow (records `prepayment` kind; reduces tenure; shows "months saved").
-- [ ] Foreclosure/early-closure summary sheet: months remaining, interest saved.
-- [ ] Edit loan (rate, dueDay, name) — recomputes EMI + future rows; past rows untouched.
-- [ ] Loans section in CSV export; "Projected payoff" chip on Insights; "Completed loans" on /loans.
-- [ ] Autopay flag (informational only — no payment execution).
+- [x] Prepayment records `prepayment` and previews months saved.
+- [x] Foreclosure summary shows remaining balance, months, and interest saved.
+- [x] Edit loan (rate, dueDay, name) — recomputes EMI and schedule while preserving recorded payments.
+- [x] Loans in CSV export; projected payoff on Insights; completed loans on `/loans`.
+- [x] Autopay flag (informational only — no payment execution).
 
 ### Explicitly out of scope
 Bank sync, credit-score, amortization renegotiation wizard, reminders via SMS/WhatsApp, iOS-only widgets.

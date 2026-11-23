@@ -4,9 +4,9 @@ import { router } from 'expo-router';
 import { colors } from '@/theme';
 import { AppText } from './AppText';
 
-interface Props { title: string; back?: boolean; right?: React.ReactNode; subtitle?: string }
+interface Props { title: string; back?: boolean; right?: React.ReactNode; subtitle?: string; icon?: React.ComponentProps<typeof Feather>['name'] }
 
-export function ScreenHeader({ title, back, right, subtitle }: Props) {
+export function ScreenHeader({ title, back, right, subtitle, icon }: Props) {
   return (
     <View style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 }}>
@@ -15,6 +15,7 @@ export function ScreenHeader({ title, back, right, subtitle }: Props) {
             <Feather name="chevron-left" size={26} color={colors.text} />
           </Pressable>
         ) : null}
+        {icon ? <Feather name={icon} size={20} color={colors.expense} /> : null}
         <View style={{ flex: 1, minWidth: 0 }}>
           <AppText variant="title" accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{title}</AppText>
           {subtitle ? <AppText variant="caption" color={colors.muted} style={{ marginTop: 2 }} numberOfLines={1}>{subtitle}</AppText> : null}

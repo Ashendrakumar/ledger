@@ -42,18 +42,27 @@
           "backgroundColor": "#E6F4FE"
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#E6F4FE",
+          "defaultChannel": "default"
+        }
+      ],
       [
         "expo-local-authentication",
         {
           "faceIDPermission": "Ledger uses Face ID to unlock your data."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
+      "apiBase": "http://localhost:3000",
       "router": {},
       "eas": {
         "projectId": "8caba142-7b25-4fd1-b444-d642664abd74"

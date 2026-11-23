@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
 import { colors, font } from '@/theme';
 import { Sheet } from '@/components/ui/Sheet';
@@ -77,13 +78,16 @@ export default function NewLoan() {
     <Sheet style={{ flex: 1 }} footer={<SheetActions primaryLabel={editing ? 'Save changes' : 'Add loan'} onPrimary={save} disabled={!ok} />}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingBottom: 8 }} style={{ flex: 1, flexShrink: 1 }}>
-          <AppText variant="heading" style={{ fontSize: 22 }}>{editing ? 'Edit loan' : 'Add loan'}</AppText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Feather name="credit-card" size={20} color={colors.expense} />
+            <AppText variant="heading" style={{ fontSize: 22 }}>{editing ? 'Edit loan' : 'Add loan'}</AppText>
+          </View>
 
           <View style={{ gap: 8 }}>
             <AppText variant="label" color={colors.muted}>QUICK PICK</AppText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
               {['Home loan', 'Car loan', 'Personal loan', 'Education loan', 'Other'].map((c) => (
-                <Chip key={c} label={c} selected={name === c} onPress={() => setName(c)} />
+                <Chip key={c} label={c} selected={name === c} icon={<Feather name="credit-card" size={14} color={name === c ? colors.white : colors.muted} />} onPress={() => setName(c)} />
               ))}
             </ScrollView>
           </View>

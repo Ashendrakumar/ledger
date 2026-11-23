@@ -7,6 +7,8 @@ interface AuthState {
   user: User | null;
   /** True once persisted state has been read from disk. */
   hydrated: boolean;
+  setupComplete: boolean;
+  completeSetup: () => void;
   signIn: (email: string) => void;
   signOut: () => void;
 }
@@ -20,6 +22,8 @@ export const useAuth = create<AuthState>()(
     (set) => ({
       user: null,
       hydrated: false,
+      setupComplete: false,
+      completeSetup: () => set({ setupComplete: true }),
       signIn: (email) => set({ user: { email } }),
       signOut: () => set({ user: null }),
     }),
@@ -27,7 +31,7 @@ export const useAuth = create<AuthState>()(
       name: 'ledger.auth',
       storage,
       version: 1,
-      partialize: (s) => ({ user: s.user }),
+      partialize: (s) => ({ user: s.user, setupComplete: s.setupComplete }),
       onRehydrateStorage: () => () => useAuth.setState({ hydrated: true }),
     },
   ),

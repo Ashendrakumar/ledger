@@ -1,15 +1,18 @@
 import { useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { colors, radius } from '@/theme';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { AppText } from '@/components/ui/AppText';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useLoans } from '@/store/loans';
+import { useEntries } from '@/store/entries';
 import { getLoanOverview, aggregateLoans, dueDayOf } from '@/lib/emi';
 import { formatINR } from '@/lib/money';
 import { shortMonth, labelMonth } from '@/lib/dates';
@@ -24,7 +27,8 @@ const iconForLoan = (name: string): React.ComponentProps<typeof Feather>['name']
 };
 
 export default function Loans() {
-  const { loans, payments } = useLoans();
+  const { loans, payments, remove } = useLoans();
+  const removeLoanPaymentEntries = useEntries((s) => s.removeLoanPaymentEntries);
   const [showCompleted, setShowCompleted] = useState(false);
 
   const rows = useMemo(
@@ -47,6 +51,17 @@ export default function Loans() {
   const agg = useMemo(() => aggregateLoans(loans, payments), [loans, payments]);
   const nextDue = agg.nextDue;
 
+  const confirmDelete = (loan: (typeof loans)[number]) => {
+    const paymentIds = payments.filter((payment) => payment.loanId === loan.id).map((payment) => payment.id);
+    Alert.alert('Delete this loan?', `${loan.name} and its recorded payments will be removed. This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => {
+        remove(loan.id);
+        if (paymentIds.length) removeLoanPaymentEntries(paymentIds);
+      } },
+    ]);
+  };
+
   const renderLoanCard = ({ loan, outstanding, repaid, ratio, nextDue, overdueCount, closedIn, payoffMonth }: (typeof rows)[number]) => {
     const status =
       outstanding <= 0
@@ -56,9 +71,22 @@ export default function Loans() {
           : nextDue
             ? { label: `Due ${dueDayOf(loan)} ${shortMonth(nextDue.month)}`, color: colors.muted }
             : null;
+    const actions = () => (
+      <View style={{ flexDirection: 'row' }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Edit loan ${loan.name}`} onPress={() => router.push({ pathname: '/loan-new', params: { id: loan.id } })}
+          style={{ width: 72, backgroundColor: colors.editAction, alignItems: 'center', justifyContent: 'center' }}>
+          <Feather name="edit-2" size={20} color={colors.white} />
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Delete loan ${loan.name}`} onPress={() => confirmDelete(loan)}
+          style={{ width: 72, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' }}>
+          <Feather name="trash-2" size={20} color={colors.white} />
+        </Pressable>
+      </View>
+    );
     return (
+      <View key={loan.id} style={{ borderRadius: 22, overflow: 'hidden', marginBottom: 6 }}>
+      <ReanimatedSwipeable renderRightActions={actions} overshootRight={false}>
       <Pressable
-        key={loan.id}
         accessibilityRole="button"
         accessibilityLabel={`Loan ${loan.name}`}
         onPress={() => router.push({ pathname: '/loan/[id]', params: { id: loan.id } })}
@@ -88,6 +116,8 @@ export default function Loans() {
           <AppText variant="caption" color={colors.textSoft} style={{ fontSize: 11 }}>{formatINR(repaid)} repaid of {formatINR(loan.principalPaise)}</AppText>
         </Card>
       </Pressable>
+      </ReanimatedSwipeable>
+      </View>
     );
   };
 
@@ -99,14 +129,7 @@ export default function Loans() {
           title="Loans & EMI"
           back
           right={
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add loan"
-              onPress={() => router.push('/loan-new')}
-              style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Feather name="plus" size={18} color={colors.white} />
-            </Pressable>
+            <Button variant="outline" label="Add" accessibilityLabel="Add loan" icon={<Feather name="plus" size={17} color={colors.text} />} onPress={() => router.push('/loan-new')} height={40} />
           }
         />
       }
@@ -139,14 +162,7 @@ export default function Loans() {
       {rows.length === 0 ? (
         <Card style={{ alignItems: 'center', padding: 24, gap: 10 }}>
           <AppText color={colors.muted} variant="body">No loans yet. Add one to track the EMI, interest and progress.</AppText>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add loan"
-            onPress={() => router.push('/loan-new')}
-            style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Feather name="plus" size={18} color={colors.mint} />
-          </Pressable>
+          <Button variant="outline" label="Add loan" accessibilityLabel="Add loan" icon={<Feather name="plus" size={17} color={colors.text} />} onPress={() => router.push('/loan-new')} height={44} />
         </Card>
       ) : (
         <>

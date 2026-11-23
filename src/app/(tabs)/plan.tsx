@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
 import { MonthMenu } from '@/components/MonthMenu';
-import { TYPE_STYLE } from '@/components/EntryRow';
+import { typeStyle } from '@/components/EntryRow';
 import { useEntries } from '@/store/entries';
 import { useLoans } from '@/store/loans';
 import { useUi } from '@/store/ui';
@@ -23,8 +23,8 @@ const GROUPS: { type: EntryType; title: string }[] = [
   { type: 'income', title: 'Income' }, { type: 'expense', title: 'Expenses' }, { type: 'saving', title: 'Savings' },
 ];
 
-function SectionHeader({ title, totalPaise, tint, text, collapsed, onToggle }: {
-  title: string; totalPaise: number; tint: string; text: string; collapsed: boolean; onToggle: () => void;
+function SectionHeader({ title, icon, totalPaise, tint, text, collapsed, onToggle }: {
+  title: string; icon: React.ComponentProps<typeof Feather>['name']; totalPaise: number; tint: string; text: string; collapsed: boolean; onToggle: () => void;
 }) {
   return (
     <Pressable
@@ -34,7 +34,10 @@ function SectionHeader({ title, totalPaise, tint, text, collapsed, onToggle }: {
       onPress={onToggle}
       style={{ minHeight: 44, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: tint, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}
     >
-      <AppText variant="label" color={text} style={{ fontSize: 13 }}>{title}</AppText>
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Feather name={icon} size={16} color={text} />
+        <AppText variant="label" color={text} style={{ fontSize: 13 }}>{title}</AppText>
+      </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Money paise={totalPaise} variant="label" color={text} style={{ fontSize: 13 }} />
         <Feather name={collapsed ? 'chevron-right' : 'chevron-down'} size={17} color={text} />
@@ -79,7 +82,7 @@ export default function Plan() {
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
       <AppText variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={{ flex: 1 }}>Plan</AppText>
       <Pressable accessibilityRole="button" accessibilityLabel={`Change month, currently ${fullMonth(month)}`} onPress={() => setMonthMenu(true)}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', minHeight: 28 }}>
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 3, minHeight: 28 }}>
         <AppText variant="heading" style={{ fontSize: 15 }}>{fullMonth(month)}</AppText>
         <Feather name="chevron-down" size={15} color={colors.text} />
       </Pressable>
@@ -95,7 +98,10 @@ export default function Plan() {
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {GROUPS.map((g) => (
             <View key={g.type} style={{ flex: 1 }}>
-              <AppText variant="caption" color={colors.onInkMuted} style={{ fontSize: 12 }}>{g.title}</AppText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <Feather name={typeStyle(g.type).icon} size={13} color={typeStyle(g.type).fg} />
+            <AppText variant="caption" color={colors.onInkMuted} style={{ fontSize: 12 }}>{g.title}</AppText>
+          </View>
               <Money paise={t(g.type)} variant="subheading" color={colors.white} style={{ fontSize: 17 }} />
             </View>
           ))}
@@ -117,11 +123,11 @@ export default function Plan() {
 
       {GROUPS.map((g) => {
         const rows = planned.filter((e) => e.type === g.type);
-        const s = TYPE_STYLE[g.type];
+        const s = typeStyle(g.type);
         const closed = !!collapsed[g.type];
         return (
           <Card key={g.type} style={{ padding: 0, overflow: 'hidden' }}>
-            <SectionHeader title={g.title} totalPaise={t(g.type)} tint={s.tint} text={s.text} collapsed={closed} onToggle={() => toggle(g.type)} />
+            <SectionHeader title={g.title} icon={s.icon} totalPaise={t(g.type)} tint={s.tint} text={s.text} collapsed={closed} onToggle={() => toggle(g.type)} />
             {closed ? null : rows.length === 0 ? <View style={{ padding: 16 }}><AppText color={colors.muted} variant="caption">Nothing planned.</AppText></View> : rows.map((e) => (
               <Pressable key={e.id} accessibilityRole="button" onPress={() => router.push({ pathname: '/add', params: { id: e.id } })}
                 style={{ minHeight: 44, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: colors.border }}>
@@ -135,7 +141,7 @@ export default function Plan() {
 
       {/* EMI / loans scheduled for the selected month */}
       <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <SectionHeader title="EMI / Loans" totalPaise={emiTotal} tint={colors.expenseTint} text={colors.expenseText} collapsed={!!collapsed.emi} onToggle={() => toggle('emi')} />
+        <SectionHeader title="EMI / Loans" icon="credit-card" totalPaise={emiTotal} tint={colors.expenseTint} text={colors.expenseText} collapsed={!!collapsed.emi} onToggle={() => toggle('emi')} />
         {collapsed.emi ? null : emiRows.length === 0 ? (
           <View style={{ padding: 16, gap: 8 }}>
             <AppText color={colors.muted} variant="caption">{loans.length === 0 ? 'No loans yet. Add one to see its EMI here.' : 'No EMI scheduled for this month.'}</AppText>
@@ -167,7 +173,7 @@ export default function Plan() {
               style={{ minHeight: 56, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: colors.border }}
             >
               <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: 'rgba(184,70,10,0.14)', alignItems: 'center', justifyContent: 'center' }}>
-                <Feather name="percent" size={17} color={colors.expense} />
+                <Feather name="credit-card" size={17} color={colors.expense} />
               </View>
               <View style={{ flex: 1, gap: 1 }}>
                 <AppText variant="body" style={{ fontSize: 14 }} numberOfLines={1}>{loan.name}</AppText>

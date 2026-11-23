@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { colors, font, hit } from '@/theme';
+import { colors, font, hit, isDark } from '@/theme';
 import { AppText } from './AppText';
 
 export type ButtonVariant = 'primary' | 'outline' | 'danger' | 'ghost';
@@ -15,13 +15,6 @@ interface Props extends Omit<PressableProps, 'children' | 'style'> {
   height?: number;
   style?: StyleProp<ViewStyle>;
 }
-
-const look: Record<ButtonVariant, { bg: string; fg: string; border?: string }> = {
-  primary: { bg: colors.ink, fg: colors.white },
-  outline: { bg: colors.white, fg: colors.primary, border: colors.primary },
-  danger: { bg: colors.expenseTint, fg: colors.danger },
-  ghost: { bg: 'transparent', fg: colors.primary },
-};
 
 // Shared press feel everywhere: quick spring down on press-in, springy return with a
 // small overshoot on release. Runs on the UI thread via the inner Animated.View.
@@ -51,7 +44,12 @@ export function Button({
   accessibilityLabel,
   ...rest
 }: Props) {
-  const v = look[variant];
+  const v = {
+    primary: isDark() ? { bg: colors.mint, fg: colors.ink } : { bg: colors.ink, fg: colors.white },
+    outline: { bg: colors.card, fg: colors.text, border: colors.borderStrong },
+    danger: { bg: colors.expenseTint, fg: colors.danger },
+    ghost: { bg: 'transparent', fg: colors.primary },
+  }[variant];
   const scale = useSharedValue(1);
   const pressed = useSharedValue(0);
 
@@ -91,7 +89,7 @@ export function Button({
         style={[
           {
             minHeight: Math.max(hit, height),
-            borderRadius: 16,
+            borderRadius: 18,
             backgroundColor: v.bg,
             borderWidth: v.border ? 1.5 : 0,
             borderColor: v.border,

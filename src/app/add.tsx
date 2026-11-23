@@ -8,8 +8,9 @@ import { SheetActions } from '@/components/ui/SheetActions';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
+import { DateField } from '@/components/ui/DateField';
 import { Segmented } from '@/components/ui/Segmented';
-import { TYPE_STYLE } from '@/components/EntryRow';
+import { typeStyle } from '@/components/EntryRow';
 import { useEntries } from '@/store/entries';
 import { useUi } from '@/store/ui';
 import { DEFAULT_CATEGORIES } from '@/lib/categories';
@@ -46,7 +47,7 @@ export default function AddEntry() {
   const value = parseFloat(amount);
   const dateOk = kind === 'planned' || DATE_RE.test(date);
   const canSave = value > 0 && !!category && dateOk;
-  const tone = TYPE_STYLE[type];
+  const tone = typeStyle(type);
 
   const save = () => {
     const entryMonth = kind === 'actual' ? date.slice(0, 7) : editing?.month ?? month;
@@ -74,7 +75,8 @@ export default function AddEntry() {
 
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {TYPES.map((t) => (
-              <Chip key={t.value} label={t.label} selected={type === t.value} tint={TYPE_STYLE[t.value].tint} tintText={TYPE_STYLE[t.value].text}
+              <Chip key={t.value} label={t.label} selected={type === t.value} tint={typeStyle(t.value).tint} tintText={typeStyle(t.value).text}
+                icon={<Feather name={typeStyle(t.value).icon} size={15} color={type === t.value ? typeStyle(t.value).text : colors.muted} />}
                 onPress={() => { setType(t.value); setCategory(''); }} />
             ))}
           </View>
@@ -100,7 +102,7 @@ export default function AddEntry() {
             contentContainerStyle={{ gap: 8, paddingRight: 4 }}
           >
             {cats.map((c) => (
-              <Chip key={c} label={c} selected={category === c} height={36} onPress={() => setCategory(c)} style={{ width: 112 }} />
+              <Chip key={c} label={c} selected={category === c} height={36} onPress={() => setCategory(c)} />
             ))}
           </ScrollView>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -133,8 +135,7 @@ export default function AddEntry() {
           </View>
 
           {kind === 'actual' ? (
-            <TextInput accessibilityLabel="Date, year-month-day" value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted} keyboardType="numbers-and-punctuation" maxLength={10}
-              style={[field, !dateOk && { borderColor: colors.danger }]} />
+            <DateField value={date} onChange={setDate} accessibilityLabel="Choose entry date" invalid={!dateOk} />
           ) : null}
           <TextInput accessibilityLabel="Note" value={note} onChangeText={setNote} placeholder="Add a note" placeholderTextColor={colors.muted} style={field} />
 

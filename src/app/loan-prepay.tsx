@@ -8,6 +8,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Sheet } from '@/components/ui/Sheet';
 import { SheetActions } from '@/components/ui/SheetActions';
+import { DateField } from '@/components/ui/DateField';
 import { Card } from '@/components/ui/Card';
 import { useLoans } from '@/store/loans';
 import { useEntries } from '@/store/entries';
@@ -88,7 +89,10 @@ export default function PrepayLoan() {
     <Sheet style={{ flex: 1 }} footer={<SheetActions primaryLabel="Record prepayment" onPrimary={save} disabled={!amountOk || !dateOk} />}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ gap: 16, flexShrink: 1 }}>
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16, paddingBottom: 8 }} style={{ flexShrink: 1 }}>
-          <AppText variant="heading" style={{ fontSize: 22 }}>Prepay loan</AppText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Feather name="credit-card" size={20} color={colors.expense} />
+            <AppText variant="heading" style={{ fontSize: 22 }}>Prepay loan</AppText>
+          </View>
           <AppText variant="caption" color={colors.muted}>{loan.name} · {loan.annualRatePct}% p.a. · outstanding {formatINR(ov.outstanding)}</AppText>
 
           <View style={{ gap: 4 }}>
@@ -110,15 +114,7 @@ export default function PrepayLoan() {
 
           <View style={{ gap: 6 }}>
             <AppText variant="label" color={colors.muted}>PAYMENT DATE</AppText>
-            <TextInput
-              accessibilityLabel="Payment date, year-month-day"
-              value={date}
-              onChangeText={setDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.muted}
-              maxLength={10}
-              style={{ height: 48, borderRadius: 14, backgroundColor: colors.canvas, borderWidth: 1, borderColor: dateOk ? colors.borderStrong : colors.danger, paddingHorizontal: 14, fontFamily: font.semibold, fontSize: 15, color: colors.text }}
-            />
+            <DateField value={date} onChange={setDate} accessibilityLabel="Choose payment date" invalid={!dateOk} />
           </View>
 
           <View style={{ gap: 6 }}>

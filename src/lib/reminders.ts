@@ -3,11 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Notifications } from '@/lib/notifications';
 import type { Loan, LoanPayment } from '@/types';
 import { getLoanOverview, dueDayOf } from './emi';
-import { formatINR } from './money';
+
 import { monthKey, shiftMonth } from './dates';
 import { router } from 'expo-router';
 import { useLoans } from '@/store/loans';
 import { useSettings } from '@/store/settings';
+import { emiReminderContent } from './reminderContent';
 
 const IDS_KEY = 'ledger.emiReminderIds';
 const HOUR = 9;
@@ -95,14 +96,9 @@ export async function syncEmiReminders(loans: Loan[], payments: LoanPayment[]): 
         const fire = new Date(dueDate);
         fire.setDate(fire.getDate() - daysBefore);
         if (fire.getTime() <= now.getTime()) continue;
-        const amount = hide ? 'EMI' : `EMI ${formatINR(row.emi)}`;
         try {
           const id = await Notifications.scheduleNotificationAsync({
-            content: {
-              title: `${loan.name} EMI`,
-              body: daysBefore === 0 ? `${amount} due today.` : `${amount} due in ${daysBefore} days.`,
-              data: { type: 'emi', loanId: loan.id },
-            },
+            content: emiReminderContent(loan.name, loan.id, row, daysBefore, hide),
             trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fire },
           });
           newIds.push(id);

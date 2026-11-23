@@ -1,12 +1,13 @@
 import { Alert, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { colors } from '@/theme';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { Money } from '@/components/ui/Money';
 import { ProgressRing } from '@/components/charts/ProgressRing';
 import { useGoals } from '@/store/goals';
@@ -26,40 +27,32 @@ function GoalCard({
   onDelete: () => void;
 }) {
   const actions = () => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12 }}>
+    <View style={{ flexDirection: 'row' }}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Edit goal ${goal.name}`}
         onPress={onEdit}
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: colors.canvas,
-          borderWidth: 1,
-          borderColor: colors.borderStrong,
+          width: 72,
+          backgroundColor: colors.editAction,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Feather name="edit-2" size={18} color={colors.text} />
+        <Feather name="edit-2" size={20} color={colors.white} />
       </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Delete goal ${goal.name}`}
         onPress={onDelete}
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: colors.expenseTint,
-          borderWidth: 1,
-          borderColor: colors.danger,
+          width: 72,
+          backgroundColor: colors.danger,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Feather name="trash-2" size={18} color={colors.danger} />
+        <Feather name="trash-2" size={20} color={colors.white} />
       </Pressable>
     </View>
   );
@@ -73,7 +66,8 @@ function GoalCard({
   };
 
   return (
-    <Swipeable renderLeftActions={actions} renderRightActions={actions} overshootLeft={false} overshootRight={false}>
+    <View style={{ borderRadius: 22, overflow: 'hidden', marginBottom: 6 }}>
+    <ReanimatedSwipeable renderRightActions={actions} overshootRight={false}>
       <Pressable onLongPress={openActions} delayLongPress={350}>
         <Card style={{ borderRadius: 22 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
@@ -94,22 +88,27 @@ function GoalCard({
               accessibilityLabel={`Add ₹1,000 to ${goal.name}`}
               onPress={onAdd}
               style={{
-                width: 44,
+                minWidth: 76,
                 height: 44,
-                borderRadius: 22,
-                backgroundColor: 'transparent',
+                borderRadius: 14,
+                backgroundColor: colors.card,
                 borderWidth: 1,
                 borderColor: colors.primary,
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 5,
+                paddingHorizontal: 10,
               }}
             >
               <Feather name="plus" size={18} color={colors.primary} />
+              <AppText variant="caption" color={colors.primary} style={{ fontFamily: 'PlusJakartaSans_700Bold' }}>Add</AppText>
             </Pressable>
           </View>
         </Card>
       </Pressable>
-    </Swipeable>
+    </ReanimatedSwipeable>
+    </View>
   );
 }
 
@@ -132,21 +131,7 @@ export default function Goals() {
           title="Goals"
           back
           right={
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add new goal"
-              onPress={() => router.push('/goal-new')}
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 22,
-                backgroundColor: colors.ink,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Feather name="plus" size={18} color={colors.mint} />
-            </Pressable>
+            <Button variant="outline" label="Add" accessibilityLabel="Add new goal" icon={<Feather name="plus" size={17} color={colors.text} />} onPress={() => router.push('/goal-new')} height={40} style={{ minWidth: 84 }} />
           }
         />
       }

@@ -16,6 +16,7 @@ import { byCategory, monthlyHistory, total } from '@/lib/selectors';
 import { getLoanOverview } from '@/lib/emi';
 import { formatINR } from '@/lib/money';
 import { fullMonth, labelMonth, shortMonth } from '@/lib/dates';
+import { typeStyle } from '@/components/EntryRow';
 
 export default function Insights() {
   const entries = useEntries((s) => s.entries);
@@ -57,7 +58,7 @@ export default function Insights() {
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
       <AppText variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={{ flex: 1 }}>Insights</AppText>
       <Pressable accessibilityRole="button" accessibilityLabel={`Change month, currently ${fullMonth(month)}`} onPress={() => setMonthMenu(true)}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', minHeight: 28 }}>
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 3, minHeight: 28 }}>
         <AppText variant="heading" style={{ fontSize: 15 }}>{fullMonth(month)}</AppText>
         <Feather name="chevron-down" size={15} color={colors.text} />
       </Pressable>
@@ -91,9 +92,9 @@ export default function Insights() {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <AppText variant="subheading">Income vs expenses</AppText>
           <View style={{ flexDirection: 'row', gap: 12 }}>
-            {[['Income', colors.income], ['Expenses', colors.expense]].map(([l, c]) => (
+            {[["Income", colors.income, typeStyle('income').icon], ["Expenses", colors.expense, typeStyle('expense').icon]].map(([l, c, icon]) => (
               <View key={l} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: c }} /><AppText variant="caption" style={{ fontSize: 12 }} color={colors.textSoft}>{l}</AppText>
+                <Feather name={icon as React.ComponentProps<typeof Feather>['name']} size={14} color={c as string} /><AppText variant="caption" style={{ fontSize: 12 }} color={colors.textSoft}>{l}</AppText>
               </View>
             ))}
           </View>
@@ -118,7 +119,10 @@ export default function Insights() {
 
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <View style={{ flex: 1, backgroundColor: colors.savingsTint, borderRadius: 20, padding: 14 }}>
-          <AppText variant="caption" color={colors.textSoft} style={{ fontSize: 12 }}>Savings rate</AppText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Feather name={typeStyle('saving').icon} size={14} color={colors.savingsText} />
+            <AppText variant="caption" color={colors.textSoft} style={{ fontSize: 12 }}>Savings rate</AppText>
+          </View>
           <AppText variant="display" color={colors.savingsText} style={{ fontSize: 26 }}>{d.rate}%</AppText>
           <AppText variant="caption" color={colors.textSoft} style={{ fontSize: 12 }}>of income saved</AppText>
         </View>

@@ -1,4 +1,5 @@
 import { Pressable, useWindowDimensions, View, type ViewProps } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -13,7 +14,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { colors, radius } from '@/theme';
+import { colors, isDark, radius } from '@/theme';
 import type { ReactNode } from 'react';
 
 /**
@@ -23,14 +24,14 @@ import type { ReactNode } from 'react';
  * sheet slides away, otherwise it springs back into place.
  * Pass `footer` to pin a 50/50 action row (e.g. <SheetActions />) at the bottom.
  */
-export function Sheet({ children, footer, style, maxHeight = '92%' }: ViewProps & { footer?: ReactNode; maxHeight?: `${number}%` }) {
+export function Sheet({ children, footer, style, maxHeight = '92%', onDismiss }: ViewProps & { footer?: ReactNode; maxHeight?: `${number}%`; onDismiss?: () => void }) {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const translateY = useSharedValue(0);
 
   const dismiss = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    router.back();
+    (onDismiss ?? router.back)();
   };
 
   const pan = Gesture.Pan()
@@ -61,15 +62,20 @@ export function Sheet({ children, footer, style, maxHeight = '92%' }: ViewProps 
 
   return (
     <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+      <BlurView
+        intensity={isDark() ? 14 : 24}
+        tint="dark"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Close"
         onPress={() => router.back()}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.backdrop }}
       />
       <Animated.View
         style={[
-          { maxHeight, width: '100%', backgroundColor: colors.white, borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, paddingHorizontal: 14, paddingBottom: Math.max(insets.bottom, 16), overflow: 'hidden' },
+          { maxHeight, width: '100%', backgroundColor: colors.card, borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom, 16), overflow: 'hidden' },
           style,
           sheetStyle,
         ]}
