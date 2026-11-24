@@ -16,6 +16,7 @@ import { useEntries } from '@/store/entries';
 import { getLoanOverview, aggregateLoans, dueDayOf } from '@/lib/emi';
 import { formatINR } from '@/lib/money';
 import { shortMonth, labelMonth } from '@/lib/dates';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 
 const iconForLoan = (name: string): React.ComponentProps<typeof Feather>['name'] => {
   const n = name.toLowerCase();
@@ -71,18 +72,14 @@ export default function Loans() {
           : nextDue
             ? { label: `Due ${dueDayOf(loan)} ${shortMonth(nextDue.month)}`, color: colors.muted }
             : null;
-    const actions = () => (
-      <View style={{ flexDirection: 'row' }}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Edit loan ${loan.name}`} onPress={() => router.push({ pathname: '/loan-new', params: { id: loan.id } })}
-          style={{ width: 72, backgroundColor: colors.editAction, alignItems: 'center', justifyContent: 'center' }}>
-          <Feather name="edit-2" size={20} color={colors.white} />
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Delete loan ${loan.name}`} onPress={() => confirmDelete(loan)}
-          style={{ width: 72, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' }}>
-          <Feather name="trash-2" size={20} color={colors.white} />
-        </Pressable>
-      </View>
-    );
+  const actions = () => (
+    <SwipeActions
+      editLabel={`Edit loan ${loan.name}`}
+      deleteLabel={`Delete loan ${loan.name}`}
+      onEdit={() => router.push({ pathname: '/loan-new', params: { id: loan.id } })}
+      onDelete={() => confirmDelete(loan)}
+    />
+  );
     return (
       <View key={loan.id} style={{ borderRadius: 22, overflow: 'hidden', marginBottom: 6 }}>
       <ReanimatedSwipeable renderRightActions={actions} overshootRight={false}>

@@ -23,6 +23,8 @@ const lightColors = {
   savingsTint: '#E5EDF9',
   savingsText: '#1F4A8C',
   editAction: '#2B5BA8',
+  editActionTint: '#E5EDF9',
+  deleteActionTint: '#FBEBDD',
   danger: '#B3261E',
   switchOff: '#C5D0CB',
   white: '#FFFFFF',
@@ -52,6 +54,8 @@ export const darkColors = {
   savingsTint: '#1D2D49',
   savingsText: '#C5D8FF',
   editAction: '#294F93',
+  editActionTint: '#1D2D49',
+  deleteActionTint: '#3A281D',
   danger: '#FF8A80',
   backdrop: 'rgba(0, 0, 0, 0.32)',
 } as const;

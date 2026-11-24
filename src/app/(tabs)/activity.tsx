@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, TextInput, View, FlatList, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font } from '@/theme';
 import { AppText } from '@/components/ui/AppText';
@@ -11,6 +10,7 @@ import { Chip } from '@/components/ui/Chip';
 import { MonthMenu } from '@/components/MonthMenu';
 import { Segmented } from '@/components/ui/Segmented';
 import { EntryRow, typeStyle } from '@/components/EntryRow';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 import { useEntries } from '@/store/entries';
 import { useUi } from '@/store/ui';
 import { fullMonth } from '@/lib/dates';
@@ -30,17 +30,20 @@ export default function Activity() {
   const [filter, setFilter] = useState<EntryType | 'all'>('all');
   const [q, setQ] = useState('');
   const [monthMenu, setMonthMenu] = useState(false);
+  const normalizedQuery = q.trim().toLowerCase();
+  const amountQuery = normalizedQuery.replace(/\D/g, '');
+  const amountSearch = normalizedQuery.length > 0 && /^[\d₹,\s]+$/.test(normalizedQuery);
+  const matchesQuery = useCallback((entry: Entry) => {
+    if (!normalizedQuery) return true;
+    if (`${entry.category} ${entry.note ?? ''}`.toLowerCase().includes(normalizedQuery)) return true;
+    if (!amountSearch || !amountQuery) return false;
+    return formatINR(entry.amountPaise).replace(/\D/g, '').includes(amountQuery);
+  }, [normalizedQuery, amountSearch, amountQuery]);
 
   const rows = useMemo<Row[]>(() => {
-    const amountQuery = q.replace(/\D/g, '');
     const list = entries
       .filter((e) => e.kind === kind && e.month === month && (filter === 'all' || e.type === filter))
-      .filter((e) => {
-        if (!q) return true;
-        const textMatch = `${e.category} ${e.note ?? ''}`.toLowerCase().includes(q.toLowerCase());
-        const entryAmount = formatINR(e.amountPaise).replace(/\D/g, '');
-        return textMatch || (amountQuery.length > 0 && entryAmount.includes(amountQuery));
-      })
+      .filter(matchesQuery)
       .sort((a, b) => (b.date ?? b.month).localeCompare(a.date ?? a.month));
     const out: Row[] = [];
     let last = '';
@@ -52,17 +55,17 @@ export default function Activity() {
       out.push({ kind: 'entry', key: e.id, entry: e });
     }
     return out;
-  }, [entries, kind, month, filter, q]);
+  }, [entries, kind, month, filter, matchesQuery]);
 
   const summary = useMemo(() => {
     const matching = entries
       .filter((e) => e.kind === kind && e.month === month)
-      .filter((e) => !q || `${e.category} ${e.note ?? ''}`.toLowerCase().includes(q.toLowerCase()));
+      .filter(matchesQuery);
     const allTotal = matching.reduce((sum, entry) => sum + entry.amountPaise, 0);
     const selected = filter === 'all' ? matching : matching.filter((entry) => entry.type === filter);
     const total = selected.reduce((sum, entry) => sum + entry.amountPaise, 0);
     return { total, count: selected.length, share: allTotal > 0 ? Math.round((total / allTotal) * 100) : 0 };
-  }, [entries, kind, month, filter, q]);
+  }, [entries, kind, month, filter, matchesQuery]);
 
   const confirmDelete = (e: Entry) =>
     Alert.alert('Delete this entry?', `${e.note || e.category} will be removed.`, [
@@ -71,21 +74,21 @@ export default function Activity() {
     ]);
 
   const actions = (e: Entry) => (
-    <View style={{ flexDirection: 'row' }}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Edit" onPress={() => router.push({ pathname: '/add', params: { id: e.id } })} style={{ width: 72, backgroundColor: colors.editAction, alignItems: 'center', justifyContent: 'center' }}>
-        <Feather name="edit-2" size={20} color={colors.white} />
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Delete" onPress={() => confirmDelete(e)} style={{ width: 72, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' }}>
-        <Feather name="trash-2" size={20} color={colors.white} />
-      </Pressable>
-    </View>
+    <SwipeActions
+      onEdit={() => router.push({ pathname: '/add', params: { id: e.id } })}
+      onDelete={() => confirmDelete(e)}
+    />
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <Animated.FlatList
+      <FlatList
         data={rows}
         keyExtractor={(r) => r.key}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={40}
+        windowSize={9}
         ListHeaderComponent={
           <View style={{ paddingTop: insets.top + 12, gap: 12, paddingBottom: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>

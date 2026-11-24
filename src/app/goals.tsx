@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Money } from '@/components/ui/Money';
 import { ProgressRing } from '@/components/charts/ProgressRing';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 import { useGoals } from '@/store/goals';
 import { formatINR, toPaise } from '@/lib/money';
 import { fullMonth } from '@/lib/dates';
@@ -27,34 +28,12 @@ function GoalCard({
   onDelete: () => void;
 }) {
   const actions = () => (
-    <View style={{ flexDirection: 'row' }}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Edit goal ${goal.name}`}
-        onPress={onEdit}
-        style={{
-          width: 72,
-          backgroundColor: colors.editAction,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Feather name="edit-2" size={20} color={colors.white} />
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Delete goal ${goal.name}`}
-        onPress={onDelete}
-        style={{
-          width: 72,
-          backgroundColor: colors.danger,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Feather name="trash-2" size={20} color={colors.white} />
-      </Pressable>
-    </View>
+    <SwipeActions
+      editLabel={`Edit goal ${goal.name}`}
+      deleteLabel={`Delete goal ${goal.name}`}
+      onEdit={onEdit}
+      onDelete={onDelete}
+    />
   );
 
   const openActions = () => {
