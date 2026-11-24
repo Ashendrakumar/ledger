@@ -13,6 +13,7 @@ import { useAuth } from '@/store/auth';
 import { useEntries } from '@/store/entries';
 import { formatINR, toPaise } from '@/lib/money';
 import { fullMonth } from '@/lib/dates';
+import { flushOnboarding } from '@/lib/onboardingQueue';
 
 const LINES = [
   { name: 'Rent & home', category: 'Rent', share: 0.28, icon: 'home' as const },
@@ -40,8 +41,11 @@ export default function Onboarding() {
   const suggest = () => setAmounts(LINES.map((line) => Math.round(amount * line.share)));
   const finish = () => {
     const rows = LINES.map((line, i) => ({ kind: 'planned' as const, type: line.type ?? 'expense' as const, amountPaise: toPaise(amounts[i] ?? 0), category: line.category, month }));
-    addMany([...rows, { kind: 'planned', type: 'income', amountPaise: toPaise(amount), category: 'Salary', month }]);
-    completeSetup();
+    const created = addMany([...rows, { kind: 'planned', type: 'income', amountPaise: toPaise(amount), category: 'Salary', month }]);
+    const userId = useAuth.getState().user?.id;
+    void completeSetup(created).then(() => {
+      if (userId) return flushOnboarding(userId);
+    }).catch(() => {});
     router.replace('/(tabs)');
   };
 

@@ -8,8 +8,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "icon": "./assets/icon.png",
-      "darkModeIcon": "./assets/icon-dark.png"
+      "icon": "./assets/icon.png"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +17,6 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "notificationIcon": "./assets/notification-icon.png",
       "predictiveBackGestureEnabled": false,
       "package": "com.ifourashendra.ledger",
       "permissions": [
@@ -56,13 +54,14 @@
           "faceIDPermission": "Ledger uses Face ID to unlock your data."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "apiBase": "http://localhost:3000",
+      "apiBase": "http://10.0.2.2:3000",
       "router": {},
       "eas": {
         "projectId": "8caba142-7b25-4fd1-b444-d642664abd74"

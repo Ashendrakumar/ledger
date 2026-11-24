@@ -6,16 +6,45 @@ import { colors, font, radius } from '@/theme';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/auth';
+import { ApiError } from '@/lib/api';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Login() {
   const insets = useSafeAreaInsets();
+  const requestCode = useAuth((s) => s.requestCode);
   const signIn = useAuth((s) => s.signIn);
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'email' | 'code'>('email');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const valid = EMAIL_RE.test(email.trim());
+
+  const sendCode = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await requestCode(email);
+      setStep('code');
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Could not send a code. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await signIn(email, code);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Could not verify the code. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.ink }}>
@@ -54,7 +83,7 @@ export default function Login() {
                 style={{ flex: 1, fontFamily: font.semibold, fontSize: 15, color: colors.text }}
               />
             </View>
-            <Button label="Continue with email" disabled={!valid} height={56} onPress={() => setStep('code')}
+            <Button label="Continue with email" disabled={!valid} loading={busy} height={56} onPress={() => { void sendCode(); }}
               icon={<Feather name="arrow-right" size={18} color={colors.mint} />} />
             <AppText variant="caption" color={colors.muted}>We will email you a 6-digit code. No password to remember.</AppText>
           </>
@@ -71,13 +100,13 @@ export default function Login() {
               autoComplete="one-time-code"
               style={{ height: 56, borderRadius: 16, backgroundColor: colors.canvas, borderWidth: 2, borderColor: colors.primary, textAlign: 'center', letterSpacing: 8, fontFamily: font.extrabold, fontSize: 22, color: colors.text }}
             />
-            {/* Prototype: any 6 digits are accepted. Wire to your backend here. */}
-            <Button label="Verify and sign in" disabled={code.length !== 6} height={56} onPress={() => signIn(email.trim().toLowerCase())} />
+            <Button label="Verify and sign in" disabled={code.length !== 6} loading={busy} height={56} onPress={() => { void verifyCode(); }} />
             <Pressable accessibilityRole="button" onPress={() => { setStep('email'); setCode(''); }} style={{ height: 44, alignItems: 'center', justifyContent: 'center' }}>
               <AppText color={colors.primary} style={{ fontFamily: font.bold, fontSize: 14 }}>Use a different email</AppText>
             </Pressable>
           </>
         )}
+        {error ? <AppText color={colors.danger} accessibilityRole="alert">{error}</AppText> : null}
       </View>
     </KeyboardAvoidingView>
   );

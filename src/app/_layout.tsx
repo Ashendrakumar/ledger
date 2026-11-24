@@ -16,6 +16,7 @@ import { useSettings } from '@/store/settings';
 import { AppLockGate } from '@/components/AppLockGate';
 import { initEmiReminderSync } from '@/lib/reminders';
 import { initBudgetAlertSync } from '@/lib/budgetAlerts';
+import { flushOnboarding } from '@/lib/onboardingQueue';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -25,9 +26,12 @@ export default function RootLayout() {
     PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold,
   });
   const hydrated = useAuth((s) => s.hydrated);
+  const sessionChecked = useAuth((s) => s.sessionChecked);
+  const restoreSession = useAuth((s) => s.restoreSession);
+  const userId = useAuth((s) => s.user?.id);
   const signedIn = useAuth((s) => !!s.user);
   const setupComplete = useAuth((s) => s.setupComplete);
-  const ready = fontsLoaded && hydrated;
+  const ready = fontsLoaded && hydrated && sessionChecked;
   // Re-render the tree when the theme mode or the system color scheme changes —
   // `colors` in `@/theme` re-reads the current palette on every render.
   const [, setTick] = useState(0);
@@ -37,6 +41,14 @@ export default function RootLayout() {
     const t2 = Appearance.addChangeListener(() => setTick((t) => t + 1));
     return () => { t1(); t2.remove(); };
   }, []);
+
+  useEffect(() => {
+    if (hydrated) void restoreSession();
+  }, [hydrated, restoreSession]);
+
+  useEffect(() => {
+    if (sessionChecked && userId) void flushOnboarding(userId);
+  }, [sessionChecked, userId]);
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});

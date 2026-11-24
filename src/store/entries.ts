@@ -16,7 +16,7 @@ interface EntriesState {
   copyPlanFromPrevious: (month: string) => number;  clearAll: () => void;
   loadSample: () => void;
   /** Prepends imported entries (from CSV) to the ledger. */
-  addMany: (entries: Omit<Entry, 'id'>[]) => void;
+  addMany: (entries: Omit<Entry, 'id'>[]) => Entry[];
 }
 
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -41,7 +41,11 @@ export const useEntries = create<EntriesState>()(
       },
       clearAll: () => set({ entries: [] }),
       loadSample: () => set({ entries: seedEntries }),
-      addMany: (entries) => set((s) => ({ entries: [...entries.map((e) => ({ ...e, id: uid() })), ...s.entries] })),
+      addMany: (entries) => {
+        const created = entries.map((entry) => ({ ...entry, id: uid() }));
+        set((s) => ({ entries: [...created, ...s.entries] }));
+        return created;
+      },
     }),
     { name: 'ledger.entries', storage, version: 1 },
   ),

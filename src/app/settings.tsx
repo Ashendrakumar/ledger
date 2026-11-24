@@ -1,7 +1,9 @@
-import { Alert, Pressable, View } from 'react-native';
+import { Alert, Platform, Pressable, View } from 'react-native';
 import { useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import * as FS from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { colors } from '@/theme';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
@@ -14,6 +16,9 @@ import { router } from 'expo-router';
 import { useEntries } from '@/store/entries';
 import { useLoans } from '@/store/loans';
 import { useSettings } from '@/store/settings';
+import { useGoals } from '@/store/goals';
+import { ApiError, apiRequest, getAccessToken } from '@/lib/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { shareCsv, parseCsv } from '@/lib/csv';
 import { authenticate, canAuthenticate } from '@/components/AppLockGate';
 import { requestEmiReminderPermission } from '@/lib/reminders';
@@ -50,6 +55,27 @@ export default function Settings() {
       if (!(await shareCsv(entries, loans, loanPayments))) Alert.alert('Sharing is not available on this device.');
     } catch {
       Alert.alert('Could not export', 'Please try again.');
+    }
+  };
+  const exportAccountJson = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        Alert.alert('Unavailable on web', 'Download the account JSON backup from an iOS or Android device.');
+        return;
+      }
+      const accessToken = getAccessToken();
+      if (!accessToken) throw new Error('Reconnect to the server before exporting your account.');
+      const data = await apiRequest<Record<string, unknown>>('/me/export', {}, accessToken);
+      const file = new File(Paths.cache, `ledger-account-${Date.now()}.json`);
+      file.create({ overwrite: true });
+      await file.write(JSON.stringify(data, null, 2));
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Sharing is not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Export Ledger account data' });
+    } catch (error) {
+      Alert.alert('Could not export account data', error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Please try again.');
     }
   };
   const importCsv = async () => {
@@ -106,6 +132,29 @@ export default function Settings() {
     ]);
   const confirm = (title: string, ok: string, fn: () => void) =>
     Alert.alert(title, undefined, [{ text: 'Cancel', style: 'cancel' }, { text: ok, style: 'destructive', onPress: fn }]);
+  const deleteAccount = () => Alert.alert(
+    'Delete your account?',
+    'This permanently deletes your account and its synced financial records. The action cannot be undone.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete account', style: 'destructive', onPress: () => {
+        void (async () => {
+          const accessToken = getAccessToken();
+          if (!accessToken) throw new Error('Reconnect to the server before deleting your account.');
+          await apiRequest<void>('/me', { method: 'DELETE' }, accessToken);
+          if (user?.id) await AsyncStorage.removeItem(`ledger.pending-onboarding.${user.id}`).catch(() => {});
+          useEntries.getState().clearAll();
+          useGoals.setState({ goals: [] });
+          useLoans.setState({ loans: [], payments: [] });
+          await signOut();
+          router.replace('/(auth)');
+          Alert.alert('Account deleted', 'Your account and synced financial records were deleted.');
+        })().catch((error: unknown) => {
+          Alert.alert('Could not delete account', error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Please try again.');
+        });
+      } },
+    ],
+  );
 
   return (
     <Screen tabBar={false} header={<ScreenHeader title="Settings" back />}>
@@ -132,9 +181,11 @@ export default function Settings() {
 
       <Group title="YOUR DATA">
         <Row first label="Export to CSV or Google Sheets" onPress={exportCsv} />
+        <Row label="Export account backup (JSON)" onPress={() => { void exportAccountJson(); }} />
         <Row label="Import from CSV" onPress={importCsv} />
         <Row label="Load sample data" onPress={() => confirm('Replace your entries with sample data?', 'Replace', loadSample)} />
         <Row label="Delete all entries" onPress={() => confirm('Delete every entry?', 'Delete all', clearAll)} />
+        <Row label="Delete account and synced data" onPress={deleteAccount} />
       </Group>
 
       <Group title="SECURITY AND ALERTS">
