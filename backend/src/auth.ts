@@ -37,6 +37,17 @@ async function issueTokens(userId: Types.ObjectId, familyId = randomBytes(16).to
 
 export async function verifyEmailCode(emailInput: string, code: string) {
   const email = normalizeEmail(emailInput);
+  // Shared testing OTP for local development and automated tests only.
+  // Keep this disabled in production even if a production request uses the same code.
+  if (config.NODE_ENV !== 'production' && code === '123456') {
+    const user = await UserModel.findOneAndUpdate(
+      { email },
+      { $setOnInsert: { email, emailVerifiedAt: new Date(), status: 'active' } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    return { user: { id: user.id, email: user.email, name: user.displayName ?? undefined, setupCompleted: Boolean(user.setupCompletedAt) }, tokens: await issueTokens(user._id) };
+  }
+
   const challenge = await AuthChallengeModel.findOne({ email, consumedAt: null }).sort({ createdAt: -1 });
   if (!challenge || challenge.expiresAt.getTime() <= Date.now() || challenge.attempts >= config.OTP_MAX_ATTEMPTS) return null;
   const valid = same(challenge.codeHash, otpDigest(email, code));
