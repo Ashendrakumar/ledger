@@ -83,7 +83,7 @@ function asApiRecord(row: Record<string, unknown>) {
   return { ...rest, ...(emiPaise === undefined ? {} : { emiPaise }), id: rest.clientId ?? String(_id), clientId: rest.clientId ?? String(_id) };
 }
 
-function computeEMI(principalPaise: number, annualRatePct: number, tenureMonths: number) {
+export function computeEMI(principalPaise: number, annualRatePct: number, tenureMonths: number) {
   if (principalPaise <= 0 || tenureMonths <= 0) return 0;
   const rate = annualRatePct / 12 / 100;
   if (rate <= 0) return Math.round(principalPaise / tenureMonths);

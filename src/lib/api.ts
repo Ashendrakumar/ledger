@@ -1,7 +1,9 @@
-import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+import { clearRefreshToken, getRefreshToken, setRefreshToken } from './authTokens';
 
-const configuredBase = process.env.EXPO_PUBLIC_API_BASE_URL ?? Constants.expoConfig?.extra?.apiBase;
-export const API_BASE = typeof configuredBase === 'string' ? configuredBase.replace(/\/$/, '') : '';
+const configuredBase = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+const localFallback = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+export const API_BASE = (configuredBase || localFallback).replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -34,6 +36,47 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, acc
     throw new ApiError(response.status, body.error?.code ?? 'REQUEST_FAILED', body.error?.message ?? 'The request could not be completed.');
   }
   return body as T;
+}
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) return null;
+    try {
+      const result = await apiRequest<AuthResult>('/auth/refresh', {
+        method: 'POST', body: JSON.stringify({ refreshToken }),
+      });
+      await setRefreshToken(result.tokens.refreshToken);
+      setAccessToken(result.tokens.accessToken);
+      return result.tokens.accessToken;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        await clearRefreshToken().catch(() => {});
+        setAccessToken(null);
+      }
+      throw error;
+    }
+  })();
+  try { return await refreshInFlight; } finally { refreshInFlight = null; }
+}
+
+/** Makes an authenticated request, rotating the refresh token once after an expired access JWT. */
+export async function authenticatedRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let token = getAccessToken() ?? await refreshAccessToken();
+  if (!token) throw new ApiError(401, 'UNAUTHORIZED', 'Sign in to continue.');
+  try {
+    return await apiRequest<T>(path, options, token);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401 || path === '/auth/refresh') throw error;
+    if (options.signal?.aborted) throw error;
+    const refreshedToken = await refreshAccessToken();
+    if (!refreshedToken) throw error;
+    token = refreshedToken;
+    return apiRequest<T>(path, options, token);
+  }
 }
 
 export interface TokenPair {
@@ -71,9 +114,16 @@ export function refreshSession(refreshToken: string) {
 }
 
 export function logoutSession(refreshToken: string, accessToken: string) {
-  return apiRequest<void>('/auth/logout', {
-    method: 'POST', body: JSON.stringify({ refreshToken }),
-  }, accessToken);
+  const sendLogout = (token: string, bearer: string) => apiRequest<void>('/auth/logout', {
+    method: 'POST', body: JSON.stringify({ refreshToken: token }),
+  }, bearer);
+  return sendLogout(refreshToken, accessToken).catch(async (error: unknown) => {
+    if (!(error instanceof ApiError) || error.status !== 401) throw error;
+    const bearer = await refreshAccessToken();
+    const rotatedRefreshToken = await getRefreshToken();
+    if (!bearer || !rotatedRefreshToken) throw error;
+    return sendLogout(rotatedRefreshToken, bearer);
+  });
 }
 
 export function completeOnboarding(entries: {
@@ -84,10 +134,10 @@ export function completeOnboarding(entries: {
   category: string;
   month: string;
   note?: string;
-}[], accessToken: string) {
-  return apiRequest<{ setupCompleted: true; savedEntries: number }>('/onboarding/complete', {
+}[]) {
+  return authenticatedRequest<{ setupCompleted: true; savedEntries: number }>('/onboarding/complete', {
     method: 'POST', body: JSON.stringify({ entries }),
-  }, accessToken);
+  });
 }
 
 export function setAccessToken(token: string | null) {

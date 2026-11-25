@@ -3,6 +3,7 @@ import { Types, type Model } from 'mongoose';
 import { z } from 'zod';
 import { getActiveUserId } from './authGuard.js';
 import { EntryModel, GoalModel, LoanModel, LoanPaymentModel, UserModel } from './models.js';
+import { computeEMI } from './resources.js';
 
 const models: Array<{ resource: 'entries' | 'goals' | 'loans' | 'loan-payments'; model: Model<any> }> = [
   { resource: 'entries', model: EntryModel },
@@ -24,7 +25,11 @@ function parseCursor(value: string | undefined) {
 
 function publicRecord(row: Record<string, unknown>) {
   const { _id, __v: _v, ownerId: _owner, ...record } = row;
-  return { ...record, id: record.clientId ?? String(_id), clientId: record.clientId ?? String(_id) };
+  const loan = record as { principalPaise?: number; annualRatePct?: number; tenureMonths?: number };
+  const emiPaise = Number.isSafeInteger(loan.principalPaise) && Number.isFinite(loan.annualRatePct) && Number.isInteger(loan.tenureMonths)
+    ? computeEMI(loan.principalPaise!, loan.annualRatePct!, loan.tenureMonths!)
+    : undefined;
+  return { ...record, ...(emiPaise === undefined ? {} : { emiPaise }), id: record.clientId ?? String(_id), clientId: record.clientId ?? String(_id) };
 }
 
 export function registerSyncRoutes(app: FastifyInstance) {

@@ -17,7 +17,8 @@ import { useEntries } from '@/store/entries';
 import { useLoans } from '@/store/loans';
 import { useSettings } from '@/store/settings';
 import { useGoals } from '@/store/goals';
-import { ApiError, apiRequest, getAccessToken } from '@/lib/api';
+import { ApiError, authenticatedRequest } from '@/lib/api';
+import { clearAccountDataCache, stopDataSync } from '@/lib/dataSync';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { shareCsv, parseCsv } from '@/lib/csv';
 import { authenticate, canAuthenticate } from '@/components/AppLockGate';
@@ -63,9 +64,7 @@ export default function Settings() {
         Alert.alert('Unavailable on web', 'Download the account JSON backup from an iOS or Android device.');
         return;
       }
-      const accessToken = getAccessToken();
-      if (!accessToken) throw new Error('Reconnect to the server before exporting your account.');
-      const data = await apiRequest<Record<string, unknown>>('/me/export', {}, accessToken);
+      const data = await authenticatedRequest<Record<string, unknown>>('/me/export');
       const file = new File(Paths.cache, `ledger-account-${Date.now()}.json`);
       file.create({ overwrite: true });
       await file.write(JSON.stringify(data, null, 2));
@@ -139,9 +138,9 @@ export default function Settings() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete account', style: 'destructive', onPress: () => {
         void (async () => {
-          const accessToken = getAccessToken();
-          if (!accessToken) throw new Error('Reconnect to the server before deleting your account.');
-          await apiRequest<void>('/me', { method: 'DELETE' }, accessToken);
+          await authenticatedRequest<void>('/me', { method: 'DELETE' });
+          stopDataSync();
+          if (user?.id) await clearAccountDataCache(user.id);
           if (user?.id) await AsyncStorage.removeItem(`ledger.pending-onboarding.${user.id}`).catch(() => {});
           useEntries.getState().clearAll();
           useGoals.setState({ goals: [] });

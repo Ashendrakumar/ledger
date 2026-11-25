@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
 import { Toggle } from '@/components/ui/Toggle';
 import { useLoans } from '@/store/loans';
+import { useEntries } from '@/store/entries';
 import { shiftMonth, monthKey, labelMonth } from '@/lib/dates';
 import { formatINR, toPaise } from '@/lib/money';
 import { buildSchedule, computeLoanTotals } from '@/lib/emi';
@@ -70,7 +71,12 @@ export default function NewLoan() {
     const n = payments.filter((p) => p.loanId === editing.id).length;
     Alert.alert('Delete this loan?', `${editing.name} and its ${n} recorded payment${n === 1 ? '' : 's'} will be removed.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { remove(editing.id); router.back(); } },
+      { text: 'Delete', style: 'destructive', onPress: () => {
+        const paymentIds = payments.filter((p) => p.loanId === editing.id).map((p) => p.id);
+        useEntries.getState().removeLoanPaymentEntries(paymentIds);
+        remove(editing.id);
+        router.back();
+      } },
     ]);
   };
 

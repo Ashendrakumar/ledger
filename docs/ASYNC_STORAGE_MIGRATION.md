@@ -1,6 +1,6 @@
 # AsyncStorage to account sync migration
 
-This migration is a client-side, offline-first operation. Keep the existing local stores as the working cache and use the authenticated backend as the cross-device copy. Do not clear local storage until a full bootstrap or upload has been acknowledged.
+This migration is implemented as a client-side, offline-first operation. Existing local stores remain the working cache and the authenticated backend provides cross-device sync. The first authenticated account adopts and uploads the existing local data. Later accounts receive a separate local cache. Do not clear local storage until a full bootstrap or upload has been acknowledged.
 
 ## Resource mapping
 
@@ -11,14 +11,13 @@ This migration is a client-side, offline-first operation. Keep the existing loca
 | `ledger.loans` loans | `loans` | `Loan.id` | Do not upload the derived `emiPaise`; the API computes it from principal, annual rate, and tenure. |
 | `ledger.loans` payments | `loan-payments` | `LoanPayment.id` | Preserve `loanId` and payment kind. Upload loans before payments. |
 
-## First sign-in flow
+## Implemented first sign-in flow
 
-1. Authenticate and store the refresh token only in platform secure storage. Keep access tokens in memory where practical.
-2. Read the existing AsyncStorage snapshots without mutating them. Validate each row against the API contract and report invalid rows to the user for repair or export.
-3. Upload loans, then goals and entries, then loan payments. Always pass the existing local `id` as `clientId`; retry the same payload after network failures.
-4. Treat `200` idempotent create responses as success. Treat `409 CLIENT_ID_CONFLICT` as a merge conflict requiring a fetch and user-safe resolution; never silently replace the local record.
-5. Call onboarding completion only for first setup, with stable entry IDs. It is safe to retry.
-6. After uploads are acknowledged, bootstrap all pages, merge by resource and client ID, then persist the merged cache. Preserve unsynced local edits in a durable outbox.
+1. Authenticate and store the refresh token in SecureStore on native devices; access tokens stay in memory and refresh automatically on `401`.
+2. The first signed-in account claims the existing AsyncStorage cache. A durable account-specific outbox uploads local rows with their existing IDs as `clientId`.
+3. Upload ordering respects loan/payment/entry references. Creates are idempotent; edits use conditional updates and newer remote changes are retained when they win the timestamp comparison.
+4. Bootstrap pages are merged into the local cache after queued changes are acknowledged. Account changes save and restore per-account snapshots.
+5. Failed requests remain queued and retry with capped exponential backoff. Delta cursors advance after applying and persisting each page.
 
 ## Ongoing sync policy
 

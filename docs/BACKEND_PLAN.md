@@ -1,6 +1,6 @@
 # Ledger Backend Plan (Node.js + MongoDB)
 
-Status reflects this repository on 2026-11-24. The Expo client now uses backend OTP auth, secure native refresh-token storage, queued onboarding upload, JSON export, and account deletion; per-resource offline sync remains pending.
+Status reflects the current repository. The Expo client uses backend OTP/JWT auth, secure native refresh-token storage, an account-scoped offline outbox for entries/goals/loans/payments, bootstrap/delta sync, queued onboarding upload, JSON export, and account deletion. Production email delivery and live Mongo deployment still require environment setup.
 
 ## Decisions
 
@@ -8,7 +8,7 @@ Status reflects this repository on 2026-11-24. The Expo client now uses backend 
 - **Shape:** versioned REST API, modular monolith. Keep domain logic in services and persistence behind repositories so the app can evolve without microservices.
 - **Money:** integer paise only; validate safe integers and never use floating-point currency.
 - **Ownership:** every private record is scoped by authenticated `userId`; clients cannot choose another owner's ID.
-- **Offline-first client:** future app integration should keep a local cache and sync through stable IDs, timestamps, and a change cursor. Backend remains authoritative for account and synchronized records.
+- **Offline-first client:** AsyncStorage remains the local working cache. Account-scoped outbox mutations use stable IDs and retry with capped backoff. Bootstrap and delta sync update the cache; timestamp conflicts apply the most recent edit using conditional `If-Match` writes.
 - **No secrets in source:** environment variables for database, token, mail, and deployment configuration.
 
 ## Product scope mapped from the app
@@ -59,12 +59,13 @@ Current app features include email-code sign-in, first-month onboarding plan, ac
 - [ ] Add monitoring, alerts, and deployment runbook. Mongo ping health/readiness and graceful shutdown are implemented; monitoring and deployment runbook require an environment.
 - [x] Add API contract documentation and compatibility/versioning policy.
 
-### Phase 6 — Expo integration (in progress)
+### Phase 6 — Expo integration
 
 - [x] Replace local auth stub with OTP API flow and secure refresh-token storage on native devices.
-- [ ] Replace AsyncStorage-only domain persistence with local cache + queued sync while preserving offline use. Onboarding plans now queue and retry; per-resource sync is not implemented.
-- [ ] Add retry/backoff, conflict UI where needed, sign-out cleanup, and account-switch isolation.
-- [ ] Verify app behavior across Android/iOS and production builds.
+- [x] Replace AsyncStorage-only domain persistence with local cache + queued sync while preserving offline use. First signed-in account adopts existing local data; later accounts use isolated local caches.
+- [x] Add retry/backoff, conditional conflict handling, sign-out cleanup, and account-switch isolation.
+- [x] Wire entries, goals, loans, and loan payments to authenticated CRUD, bootstrap, and delta endpoints.
+- [ ] Run end-to-end mobile/API checks against a configured MongoDB service and verify Android/iOS production builds.
 
 ## Phase 1 API contract implemented
 
@@ -79,7 +80,7 @@ Base path: `/api/v1`.
 | POST | `/auth/logout` | Bearer | Revoke the presented refresh session |
 | GET | `/me` | Bearer | Return authenticated account profile |
 
-Auth response token fields are groundwork for future client integration. Store refresh tokens only in secure device storage when the app is eventually wired. OTP responses deliberately do not include the code in production.
+The app exchanges email OTP verification for an access JWT and rotating refresh token. Access JWTs are sent as Bearer tokens; native refresh tokens are stored in SecureStore. OTP responses deliberately do not include the code in production.
 
 ## Phase 2 API contract implemented
 
@@ -96,7 +97,7 @@ All resource routes require `Authorization: Bearer <accessToken>`. Collection GE
 | GET / POST | `/api/v1/loan-payments` | List or create actual/planned/prepayment records |
 | GET / PATCH / DELETE | `/api/v1/loan-payments/:id` | Read, edit, or tombstone a loan payment |
 
-These endpoints are implemented but do not yet have automated integration coverage. Their collection cursor is an ID cursor for stable browsing. The updated-record delta cursor is described below.
+The app queues local resource mutations, uploads them in dependency order, bootstraps paginated snapshots, and applies delta records/tombstones. Collection cursors use client IDs for stable browsing. The updated-record delta cursor is described below.
 
 ## Phase 3 API contract implemented
 
@@ -126,7 +127,7 @@ These endpoints are implemented but do not yet have automated integration covera
 
 ## Local development
 
-From `backend/`: `npm install`, copy `.env.example` to `.env`, start MongoDB, then `npm run dev`. `npm run build` compiles TypeScript and `npm start` runs the compiled server. Development mail logs a one-time code to the backend process output; this is disabled in production.
+From `backend/`: copy `.env.example` to `.env`, start MongoDB (`docker compose up -d mongodb` when Docker is installed), then run `npm install` and `npm run dev`. Mongoose creates collections and indexes from `backend/src/models.ts` at startup. `npm run build` compiles TypeScript and `npm start` runs the compiled server. Development mail logs a one-time code to the backend process output; this is disabled in production.
 
 ## Definition of done per phase
 

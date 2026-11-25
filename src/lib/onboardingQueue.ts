@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Entry } from '@/types';
-import { ApiError, completeOnboarding, getAccessToken, refreshSession, setAccessToken } from './api';
-import { getRefreshToken, setRefreshToken } from './authTokens';
+import { ApiError, completeOnboarding } from './api';
 
 const keyFor = (userId: string) => `ledger.pending-onboarding.${userId}`;
 
@@ -25,20 +24,7 @@ export async function flushOnboarding(userId: string) {
       month: entry.month,
       ...(entry.note ? { note: entry.note } : {}),
     }));
-    let accessToken = getAccessToken();
-    if (!accessToken) return;
-    try {
-      await completeOnboarding(payload, accessToken);
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.status !== 401) throw error;
-      const refreshToken = await getRefreshToken();
-      if (!refreshToken) return;
-      const refreshed = await refreshSession(refreshToken);
-      await setRefreshToken(refreshed.tokens.refreshToken);
-      accessToken = refreshed.tokens.accessToken;
-      setAccessToken(accessToken);
-      await completeOnboarding(payload, accessToken);
-    }
+    await completeOnboarding(payload);
     await AsyncStorage.removeItem(key);
   } catch (error) {
     // Leave the payload queued for a later launch/retry. Conflicts need explicit resolution.

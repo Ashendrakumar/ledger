@@ -17,6 +17,7 @@ import { AppLockGate } from '@/components/AppLockGate';
 import { initEmiReminderSync } from '@/lib/reminders';
 import { initBudgetAlertSync } from '@/lib/budgetAlerts';
 import { flushOnboarding } from '@/lib/onboardingQueue';
+import { startDataSync } from '@/lib/dataSync';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -48,6 +49,20 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (sessionChecked && userId) void flushOnboarding(userId);
+  }, [sessionChecked, userId]);
+
+  useEffect(() => {
+    if (!sessionChecked || !userId) return;
+    let cancelled = false;
+    let stop = () => {};
+    void startDataSync(userId).then((cleanup) => {
+      if (cancelled) cleanup();
+      else stop = cleanup;
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      stop();
+    };
   }, [sessionChecked, userId]);
 
   useEffect(() => {
