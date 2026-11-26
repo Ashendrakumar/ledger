@@ -26,12 +26,12 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const field = { height: 52, borderRadius: 16, backgroundColor: colors.canvas, borderWidth: 1, borderColor: colors.borderStrong, paddingHorizontal: 14, fontFamily: font.semibold, fontSize: 15, color: colors.text } as const;
 
 export default function AddEntry() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, kind: initialKind } = useLocalSearchParams<{ id?: string; kind?: Kind }>();
   const { entries, add, update, remove } = useEntries();
   const month = useUi((s) => s.month);
   const editing = useMemo(() => entries.find((e) => e.id === id), [entries, id]);
 
-  const [kind, setKind] = useState<Kind>(editing?.kind ?? 'actual');
+  const [kind, setKind] = useState<Kind>(editing?.kind ?? (initialKind === 'planned' ? 'planned' : 'actual'));
   const [type, setType] = useState<EntryType>(editing?.type ?? 'expense');
   const [amount, setAmount] = useState(editing ? String(editing.amountPaise / 100) : '');
   const [category, setCategory] = useState(editing?.category ?? '');

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors, radius } from '@/theme';
@@ -10,6 +10,8 @@ import { Money } from '@/components/ui/Money';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { EntryRow, typeStyle } from '@/components/EntryRow';
 import { PlanActualCard } from '@/components/PlanActualCard';
+import { ProfileMenuButton } from '@/components/ProfileMenuButton';
+import { EmptyState } from '@/components/EmptyState';
 import { MonthMenu } from '@/components/MonthMenu';
 import { useEntries } from '@/store/entries';
 import { useLoans } from '@/store/loans';
@@ -87,23 +89,8 @@ export default function Home() {
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const open = (type: string) => router.push({ pathname: '/breakdown/[type]', params: { type } });
 
-  const onBell = () => {
-    if (overdue > 0) {
-      Alert.alert('EMI reminder', `${overdue} loan instalment${overdue === 1 ? ' is' : 's are'} overdue.`, [
-        { text: 'Later', style: 'cancel' },
-        { text: 'View loans', onPress: () => router.push('/loans') },
-      ]);
-    } else {
-      Alert.alert('All caught up', 'No overdue EMIs or alerts right now.');
-    }
-  };
-
   const header = (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push('/settings')}
-        style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-        <Feather name="user" size={17} color={colors.white} />
-      </Pressable>
       <View style={{ flex: 1 }}>
         <AppText variant="caption" color={colors.textSoft} style={{ fontSize: 11 }}>{greeting}</AppText>
         <Pressable accessibilityRole="button" accessibilityLabel={`Change month, currently ${fullMonth(month)}`} onPress={() => setMonthMenu(true)}
@@ -112,17 +99,7 @@ export default function Home() {
           <Feather name="chevron-down" size={15} color={colors.text} />
         </Pressable>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => router.push('/settings')}
-        style={{ width: 42, height: 46, alignItems: 'center', justifyContent: 'center' }}>
-        <Feather name="settings" size={20} color={colors.text} />
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={overdue > 0 ? `Alerts, ${overdue} overdue EMI${overdue === 1 ? '' : 's'}` : 'Alerts'} onPress={onBell}
-        style={{ width: 46, height: 46, marginRight: -8, alignItems: 'center', justifyContent: 'center' }}>
-        <Feather name="bell" size={22} color={colors.text} />
-        {overdue > 0 ? (
-          <View style={{ position: 'absolute', top: 10, right: 11, width: 9, height: 9, borderRadius: 4.5, backgroundColor: colors.danger, borderWidth: 1.5, borderColor: colors.canvas }} />
-        ) : null}
-      </Pressable>
+      <ProfileMenuButton overdueCount={overdue} />
     </View>
   );
 
@@ -164,7 +141,7 @@ export default function Home() {
             </View>
           </View>
           <View style={{ borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)', paddingTop: 7, gap: 6 }}>
-            <View style={{ flexDirection: 'row' }}>
+            {/* <View style={{ flexDirection: 'row' }}>
               <View style={{ flex: 1, gap: 3 }}>
                 <Money paise={d.plannedOut} variant="subheading" color={colors.white} />
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -179,7 +156,7 @@ export default function Home() {
                   <AppText variant="caption" color={colors.onInkMuted} style={{ fontSize: 10 }}>Actual</AppText>
                 </View>
               </View>
-            </View>
+            </View> */}
             <View style={{ gap: 3 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <AppText variant="caption" color={colors.onInkMuted} style={{ fontSize: 11 }}>Expenses vs plan</AppText>
@@ -264,15 +241,23 @@ export default function Home() {
           <AppText variant="subheading" color={colors.primary}>See all</AppText>
         </Pressable>
       </View>
+      {d.recent.length === 0 ? (
+        <EmptyState
+          compact
+          title="No recent entries"
+          description="Add an entry to start tracking this month."
+          actionLabel="Add entry"
+          onAction={() => router.push('/add')}
+        />
+      ) : (
       <Card style={{ padding: 0, overflow: 'hidden' }}>
-        {d.recent.length === 0 ? (
-          <View style={{ padding: 20 }}><AppText color={colors.muted}>No entries this month yet. Tap + to add one.</AppText></View>
-        ) : d.recent.map((e, i) => (
+        {d.recent.map((e, i) => (
           <View key={e.id} style={{ borderTopWidth: i ? 1 : 0, borderTopColor: colors.border }}>
             <EntryRow entry={e} onPress={() => router.push({ pathname: '/add', params: { id: e.id } })} />
           </View>
         ))}
       </Card>
+      )}
       </Screen>
     </>
   );

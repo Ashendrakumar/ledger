@@ -66,7 +66,7 @@ export function registerSyncRoutes(app: FastifyInstance) {
         category: z.string().trim().min(1).max(80),
         month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
         note: z.string().max(500).optional(),
-      }).strict()).min(1).max(100),
+      }).strict()).max(100),
     }).strict();
     const parsed = bodySchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', details: parsed.error.issues } });
@@ -79,7 +79,9 @@ export function registerSyncRoutes(app: FastifyInstance) {
         upsert: true,
       },
     }));
-    await EntryModel.bulkWrite(operations as Parameters<typeof EntryModel.bulkWrite>[0], { ordered: true });
+    if (operations.length > 0) {
+      await EntryModel.bulkWrite(operations as Parameters<typeof EntryModel.bulkWrite>[0], { ordered: true });
+    }
     const account = await UserModel.findOneAndUpdate(
       { _id: ownerId, status: 'active' }, { $set: { setupCompletedAt: new Date() } }, { new: true },
     ).select('_id setupCompletedAt');

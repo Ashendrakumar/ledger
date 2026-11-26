@@ -10,6 +10,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { MonthMenu } from '@/components/MonthMenu';
 import { Toggle } from '@/components/ui/Toggle';
 import { useAuth } from '@/store/auth';
 import { router } from 'expo-router';
@@ -24,6 +25,9 @@ import { shareCsv, parseCsv } from '@/lib/csv';
 import { authenticate, canAuthenticate } from '@/components/AppLockGate';
 import { requestEmiReminderPermission } from '@/lib/reminders';
 import { requestBudgetAlertPermission } from '@/lib/budgetAlerts';
+import { useUi } from '@/store/ui';
+import { fullMonth, shiftMonth } from '@/lib/dates';
+import { inMonth } from '@/lib/selectors';
 
 function Row({ label, right, onPress, first }: { label: string; right?: React.ReactNode; onPress?: () => void; first?: boolean }) {
   return (
@@ -44,10 +48,12 @@ const Group = ({ title, children }: { title: string; children: React.ReactNode }
 export default function Settings() {
   const { user, signOut } = useAuth();
   const s = useSettings();
-  const { entries, clearAll, loadSample, addMany } = useEntries();
+  const { entries, clearAll, loadSample, addMany, copyPlanFromPrevious } = useEntries();
   const loans = useLoans((x) => x.loans);
   const loanPayments = useLoans((x) => x.payments);
+  const { month, setMonth } = useUi();
   const mode = s.theme ?? 'auto';
+  const [monthMenu, setMonthMenu] = useState(false);
   const [remindersDenied, setRemindersDenied] = useState(false);
   const [budgetAlertsDenied, setBudgetAlertsDenied] = useState(false);
 
@@ -90,6 +96,17 @@ export default function Settings() {
       Alert.alert('Imported', `${imported.length} entries added to the ledger.`);
     } catch {
       Alert.alert('Could not import', 'Please try again.');
+    }
+  };
+  const copyPreviousPlan = () => {
+    const previousMonth = shiftMonth(month, -1);
+    if (inMonth(entries, month, 'planned').length > 0) {
+      Alert.alert('Add last month\'s plan?', `${fullMonth(previousMonth)} planned entries will be added to ${fullMonth(month)}.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Copy', onPress: () => copyPlanFromPrevious(month) },
+      ]);
+    } else {
+      copyPlanFromPrevious(month);
     }
   };
   const toggleLock = async (on: boolean) => {
@@ -157,6 +174,7 @@ export default function Settings() {
 
   return (
     <Screen tabBar={false} header={<ScreenHeader title="Settings" back />}>
+      <MonthMenu visible={monthMenu} month={month} onChange={setMonth} onClose={() => setMonthMenu(false)} />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.ink, borderRadius: 22, padding: 14 }}>
         <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
@@ -170,12 +188,19 @@ export default function Settings() {
 
       <Group title="PREFERENCES">
         <Row first label="Currency" right={<AppText color={colors.muted} variant="caption">₹ INR</AppText>} />
+        <Row label="Current month" onPress={() => setMonthMenu(true)} right={
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <AppText color={colors.muted} variant="caption">{fullMonth(month)}</AppText>
+            <Feather name="chevron-right" size={18} color={colors.muted} />
+          </View>
+        } />
         <Row label="Hide amounts" right={<Toggle label="Hide amounts" value={s.hideAmounts} onValueChange={(v) => s.set('hideAmounts', v)} />} />
         <Row label="Theme" right={<AppText color={colors.muted} variant="caption">{mode === 'auto' ? 'System' : mode}</AppText>} onPress={openTheme} />
       </Group>
 
       <Group title="PLANNING">
         <Row first label="Goals" onPress={() => router.push('/goals')} />
+        <Row label={`Copy plan from ${fullMonth(shiftMonth(month, -1))}`} onPress={copyPreviousPlan} />
       </Group>
 
       <Group title="YOUR DATA">

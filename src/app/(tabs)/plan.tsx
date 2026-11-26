@@ -2,62 +2,63 @@ import { useMemo, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { colors, radius } from '@/theme';
 import { Screen } from '@/components/Screen';
 import { AppText } from '@/components/ui/AppText';
-import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Money } from '@/components/ui/Money';
-import { MonthMenu } from '@/components/MonthMenu';
+import { EntrySectionHeader } from '@/components/EntrySectionHeader';
+import { EntryListControls } from '@/components/EntryListControls';
+import { EntryCardRow } from '@/components/EntryCardRow';
+import { AccumulatedEntryRow } from '@/components/AccumulatedEntryRow';
+import { EntryListSummary } from '@/components/EntryListSummary';
+import { EmptyState } from '@/components/EmptyState';
 import { typeStyle } from '@/components/EntryRow';
+import { SwipeActions } from '@/components/ui/SwipeActions';
 import { useEntries } from '@/store/entries';
 import { useLoans } from '@/store/loans';
 import { useUi } from '@/store/ui';
 import { total, inMonth } from '@/lib/selectors';
 import { buildSchedule } from '@/lib/emi';
-import { fullMonth, shiftMonth } from '@/lib/dates';
 import { formatINR } from '@/lib/money';
-import type { EntryType } from '@/types';
+import type { Entry, EntryType } from '@/types';
 
 const GROUPS: { type: EntryType; title: string }[] = [
   { type: 'income', title: 'Income' }, { type: 'expense', title: 'Expenses' }, { type: 'saving', title: 'Savings' },
 ];
 
-function SectionHeader({ title, icon, totalPaise, tint, text, collapsed, onToggle }: {
-  title: string; icon: React.ComponentProps<typeof Feather>['name']; totalPaise: number; tint: string; text: string; collapsed: boolean; onToggle: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ expanded: !collapsed }}
-      accessibilityLabel={`${title} section, ${collapsed ? 'expand' : 'collapse'}`}
-      onPress={onToggle}
-      style={{ minHeight: 44, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: tint, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}
-    >
-      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Feather name={icon} size={16} color={text} />
-        <AppText variant="label" color={text} style={{ fontSize: 13 }}>{title}</AppText>
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Money paise={totalPaise} variant="label" color={text} style={{ fontSize: 13 }} />
-        <Feather name={collapsed ? 'chevron-right' : 'chevron-down'} size={17} color={text} />
-      </View>
-    </Pressable>
-  );
-}
-
 export default function Plan() {
-  const { entries, copyPlanFromPrevious } = useEntries();
+  const { entries, remove } = useEntries();
   const { loans, payments } = useLoans();
-  const { month, setMonth } = useUi();
+  const month = useUi((state) => state.month);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [monthMenu, setMonthMenu] = useState(false);
+  const [filter, setFilter] = useState<EntryType | 'all'>('all');
+  const [query, setQuery] = useState('');
+  const [accumulated, setAccumulated] = useState(false);
   const toggle = (key: string) => setCollapsed((s) => ({ ...s, [key]: !s[key] }));
 
   const planned = useMemo(() => inMonth(entries, month, 'planned'), [entries, month]);
+  const normalizedQuery = query.trim().toLowerCase();
+  const amountQuery = normalizedQuery.replace(/\D/g, '');
+  const amountSearch = normalizedQuery.length > 0 && /^[\d₹,\s]+$/.test(normalizedQuery);
+  const filteredPlanned = useMemo(
+    () =>
+      planned
+        .filter((entry) => filter === 'all' || entry.type === filter)
+        .filter((entry) => {
+          if (!normalizedQuery) return true;
+          if (`${entry.category} ${entry.note ?? ''}`.toLowerCase().includes(normalizedQuery)) return true;
+          return amountSearch && !!amountQuery && formatINR(entry.amountPaise).replace(/\D/g, '').includes(amountQuery);
+        })
+        .sort((a, b) => (b.date ?? b.month).localeCompare(a.date ?? a.month)),
+    [planned, filter, normalizedQuery, amountSearch, amountQuery],
+  );
+  const summaryTotal = filteredPlanned.reduce((sum, entry) => sum + entry.amountPaise, 0);
+  const summaryLabel = filter === 'all' ? 'All' : GROUPS.find((group) => group.type === filter)?.title ?? 'All';
   const t = (type: EntryType) => total(entries, month, 'planned', type);
   const left = t('income') - t('expense') - t('saving');
-  const prev = shiftMonth(month, -1);
 
   const emiRows = useMemo(
     () =>
@@ -69,32 +70,29 @@ export default function Plan() {
   const emiTotal = emiRows.reduce((a, r) => a + r.row.emi, 0);
   const emiLeft = emiRows.reduce((a, r) => a + (r.row.paid ? 0 : Math.max(0, r.row.emi - r.row.paidAmount)), 0);
 
-  const copy = () => {
-    if (planned.length) {
-      Alert.alert('Add last month\'s plan?', `${fullMonth(prev)} planned entries will be added to ${fullMonth(month)}.`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Copy', onPress: () => copyPlanFromPrevious(month) },
-      ]);
-    } else copyPlanFromPrevious(month);
-  };
+  const confirmDelete = (entry: Entry) =>
+    Alert.alert('Delete this entry?', `${entry.note || entry.category} will be removed.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => remove(entry.id) },
+    ]);
 
-  const header = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <AppText variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={{ flex: 1 }}>Plan</AppText>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Change month, currently ${fullMonth(month)}`} onPress={() => setMonthMenu(true)}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 3, minHeight: 28 }}>
-        <AppText variant="heading" style={{ fontSize: 15 }}>{fullMonth(month)}</AppText>
-        <Feather name="chevron-down" size={15} color={colors.text} />
-      </Pressable>
-    </View>
+  const actions = (entry: Entry) => (
+    <SwipeActions
+      onEdit={() => router.push({ pathname: '/add', params: { id: entry.id } })}
+      onDelete={() => confirmDelete(entry)}
+    />
   );
 
+  const showAccumulated = () => {
+    setQuery('');
+    setFilter('all');
+    setAccumulated(true);
+  };
   return (
     <>
-      <Screen header={header}>
-      <MonthMenu visible={monthMenu} month={month} onChange={setMonth} onClose={() => setMonthMenu(false)} />
+      <Screen header={<ScreenHeader title="Plan" back={accumulated} onBackPress={() => setAccumulated(false)} />} contentContainerStyle={{ gap: 12 }}>
 
-      <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 12 }}>
+      {accumulated ? <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 12 }}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {GROUPS.map((g) => (
             <View key={g.type} style={{ flex: 1 }}>
@@ -119,29 +117,46 @@ export default function Plan() {
             <Money paise={left} variant="subheading" color={left < 0 ? '#FF9C8F' : colors.mint} />
           </View>
         </View>
-      </View>
+      </View> : null}
 
-      {GROUPS.map((g) => {
-        const rows = planned.filter((e) => e.type === g.type);
-        const s = typeStyle(g.type);
-        const closed = !!collapsed[g.type];
-        return (
-          <Card key={g.type} style={{ padding: 0, overflow: 'hidden' }}>
-            <SectionHeader title={g.title} icon={s.icon} totalPaise={t(g.type)} tint={s.tint} text={s.text} collapsed={closed} onToggle={() => toggle(g.type)} />
-            {closed ? null : rows.length === 0 ? <View style={{ padding: 16 }}><AppText color={colors.muted} variant="caption">Nothing planned.</AppText></View> : rows.map((e) => (
-              <Pressable key={e.id} accessibilityRole="button" onPress={() => router.push({ pathname: '/add', params: { id: e.id } })}
-                style={{ minHeight: 44, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: colors.border }}>
-                <AppText variant="body" style={{ fontSize: 14 }}>{e.category}</AppText>
-                <Money paise={e.amountPaise} variant="subheading" style={{ fontSize: 14 }} />
-              </Pressable>
-            ))}
-          </Card>
-        );
-      })}
+      {!accumulated ? (
+        <EntryListControls
+          query={query}
+          onQueryChange={setQuery}
+          filter={filter}
+          onFilterChange={setFilter}
+          accumulated={false}
+          onToggleAccumulated={showAccumulated}
+        />
+      ) : null}
+      {!accumulated ? <EntryListSummary label={summaryLabel} count={filteredPlanned.length} totalPaise={summaryTotal} /> : null}
 
-      {/* EMI / loans scheduled for the selected month */}
-      <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <SectionHeader title="EMI / Loans" icon="credit-card" totalPaise={emiTotal} tint={colors.expenseTint} text={colors.expenseText} collapsed={!!collapsed.emi} onToggle={() => toggle('emi')} />
+      {accumulated ? <>
+        {GROUPS.map((g) => {
+          const rows = planned.filter((entry) => entry.type === g.type);
+          const s = typeStyle(g.type);
+          const closed = !!collapsed[g.type];
+          return (
+            <Card key={g.type} style={{ padding: 0, overflow: 'hidden' }}>
+              <EntrySectionHeader title={g.title} icon={s.icon} totalPaise={t(g.type)} tint={s.tint} text={s.text} collapsed={closed} onToggle={() => toggle(g.type)} />
+              {closed ? null : rows.length === 0 ? <View style={{ padding: 16 }}><AppText color={colors.muted} variant="caption">Nothing planned.</AppText></View> : rows.map((entry) => (
+                <View key={entry.id} style={{ overflow: 'hidden' }}>
+                  <ReanimatedSwipeable
+                    renderRightActions={() => actions(entry)}
+                    overshootRight={false}
+                    dragOffsetFromRight={-24}
+                  >
+                    <AccumulatedEntryRow entry={entry} onPress={() => router.push({ pathname: '/add', params: { id: entry.id } })} />
+                  </ReanimatedSwipeable>
+                </View>
+              ))}
+            </Card>
+          );
+        })}
+
+        {/* EMI / loans scheduled for the selected month */}
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <EntrySectionHeader title="EMI / Loans" icon="credit-card" totalPaise={emiTotal} tint={colors.expenseTint} text={colors.expenseText} collapsed={!!collapsed.emi} onToggle={() => toggle('emi')} />
         {collapsed.emi ? null : emiRows.length === 0 ? (
           <View style={{ padding: 16, gap: 8 }}>
             <AppText color={colors.muted} variant="caption">{loans.length === 0 ? 'No loans yet. Add one to see its EMI here.' : 'No EMI scheduled for this month.'}</AppText>
@@ -183,9 +198,34 @@ export default function Plan() {
             </Pressable>
           );
         })}
-      </Card>
+        </Card>
+      </> : (
+        <View style={{ marginTop: -4 }}>
+          {filteredPlanned.length === 0 ? (
+            <EmptyState
+              title={planned.length === 0 ? 'Your plan starts here' : 'No matching entries'}
+              description={planned.length === 0 ? 'Add your first planned entry to make a plan for this month.' : 'Try changing your search or filter, or add a planned entry.'}
+              actionLabel="Add planned entry"
+              onAction={() => router.push({ pathname: '/add', params: { kind: 'planned' } })}
+            />
+          ) : (
+            <View style={{ gap: 6 }}>
+              {filteredPlanned.map((entry) => (
+                <View key={entry.id} style={{ borderRadius: 16, overflow: 'hidden' }}>
+                  <ReanimatedSwipeable
+                    renderRightActions={() => actions(entry)}
+                    overshootRight={false}
+                    dragOffsetFromRight={-24}
+                  >
+                    <EntryCardRow entry={entry} onPress={() => router.push({ pathname: '/add', params: { id: entry.id } })} />
+                  </ReanimatedSwipeable>
+                </View>
+              ))}
+            </View>
+          )}
+          </View>
+      )}
 
-      <Button variant="outline" label={`Copy plan from ${fullMonth(prev)}`} icon={<Feather name="copy" size={18} color={colors.primary} />} onPress={copy} />
       </Screen>
     </>
   );

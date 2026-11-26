@@ -32,7 +32,7 @@ Deleting a loan with active payments returns `409 RECORDS_LINKED`; delete its pa
 
 - `GET /sync/bootstrap` returns paginated account and resource snapshots. Each resource has an independent client-ID cursor.
 - `GET /sync/changes` returns timestamp-ordered changes and tombstones using an opaque account-bound cursor. Apply records idempotently by resource and client ID.
-- `POST /onboarding/complete` upserts initial planned entries by client ID and marks setup complete. Repeating it is safe; multi-document transaction atomicity is not guaranteed.
+- `POST /onboarding/complete` upserts initial planned entries by client ID and marks setup complete. An empty entries array can mark setup complete without creating entries. Repeating it is safe; multi-document transaction atomicity is not guaranteed.
 
 ## Status and errors
 

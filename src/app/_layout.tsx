@@ -10,7 +10,7 @@ import {
   PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold,
 } from '@expo-google-fonts/plus-jakarta-sans';
-import { colors } from '@/theme';
+import { colors, isDark } from '@/theme';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
 import { AppLockGate } from '@/components/AppLockGate';
@@ -18,6 +18,7 @@ import { initEmiReminderSync } from '@/lib/reminders';
 import { initBudgetAlertSync } from '@/lib/budgetAlerts';
 import { flushOnboarding } from '@/lib/onboardingQueue';
 import { startDataSync } from '@/lib/dataSync';
+import { isMockUserId } from '@/lib/mockAuth';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -48,11 +49,11 @@ export default function RootLayout() {
   }, [hydrated, restoreSession]);
 
   useEffect(() => {
-    if (sessionChecked && userId) void flushOnboarding(userId);
+    if (sessionChecked && userId && !isMockUserId(userId)) void flushOnboarding(userId);
   }, [sessionChecked, userId]);
 
   useEffect(() => {
-    if (!sessionChecked || !userId) return;
+    if (!sessionChecked || !userId || isMockUserId(userId)) return;
     let cancelled = false;
     let stop = () => {};
     void startDataSync(userId).then((cleanup) => {
@@ -82,7 +83,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="dark" />
+        <StatusBar style={isDark() ? 'light' : 'dark'} />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="(auth)" />

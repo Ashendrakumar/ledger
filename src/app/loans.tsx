@@ -7,8 +7,8 @@ import { colors, radius } from '@/theme';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { AppText } from '@/components/ui/AppText';
-import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { EmptyState } from '@/components/EmptyState';
 import { Money } from '@/components/ui/Money';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useLoans } from '@/store/loans';
@@ -125,15 +125,19 @@ export default function Loans() {
         <ScreenHeader
           title="Loans & EMI"
           back
+          showProfile={false}
           right={
-            <Button variant="outline" label="Add" accessibilityLabel="Add loan" icon={<Feather name="plus" size={17} color={colors.text} />} onPress={() => router.push('/loan-new')} height={40} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Add loan" onPress={() => router.push('/loan-new')}
+              style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+              <Feather name="plus" size={19} color={colors.white} />
+            </Pressable>
           }
         />
       }
     >
 
       {/* Ink summary hero */}
-      <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 8 }}>
+      {rows.length > 0 ? <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 8 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
           <View style={{ flex: 1, gap: 2 }}>
             <AppText variant="caption" color={colors.onInkMuted}>Outstanding balance</AppText>
@@ -154,13 +158,15 @@ export default function Loans() {
         ) : (
           <AppText variant="caption" color={colors.onInkMuted}>{formatINR(paidTotal)} repaid so far</AppText>
         )}
-      </View>
+      </View> : null}
 
       {rows.length === 0 ? (
-        <Card style={{ alignItems: 'center', padding: 24, gap: 10 }}>
-          <AppText color={colors.muted} variant="body">No loans yet. Add one to track the EMI, interest and progress.</AppText>
-          <Button variant="outline" label="Add loan" accessibilityLabel="Add loan" icon={<Feather name="plus" size={17} color={colors.text} />} onPress={() => router.push('/loan-new')} height={44} />
-        </Card>
+        <EmptyState
+          title="No loans yet"
+          description="Add a loan to track its EMI, interest, and repayment progress."
+          actionLabel="Add loan"
+          onAction={() => router.push('/loan-new')}
+        />
       ) : (
         <>
           {activeRows.map(renderLoanCard)}

@@ -2,13 +2,14 @@ import { Alert, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { colors } from '@/theme';
+import { colors, radius } from '@/theme';
 import { Screen } from '@/components/Screen';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/EmptyState';
 import { Money } from '@/components/ui/Money';
+import { ProgressBar } from '@/components/ui/ProgressBar';
 import { ProgressRing } from '@/components/charts/ProgressRing';
 import { SwipeActions } from '@/components/ui/SwipeActions';
 import { useGoals } from '@/store/goals';
@@ -94,6 +95,8 @@ function GoalCard({
 export default function Goals() {
   const { goals, addMoney, remove } = useGoals();
   const saved = goals.reduce((a, g) => a + g.savedPaise, 0);
+  const target = goals.reduce((a, g) => a + g.targetPaise, 0);
+  const activeGoals = goals.filter((g) => g.savedPaise < g.targetPaise).length;
 
   const confirmDelete = (goal: Goal) => {
     Alert.alert('Delete this goal?', `"${goal.name}" and its progress will be removed.`, [
@@ -109,17 +112,40 @@ export default function Goals() {
         <ScreenHeader
           title="Goals"
           back
+          showProfile={false}
           right={
-            <Button variant="outline" label="Add" accessibilityLabel="Add new goal" icon={<Feather name="plus" size={17} color={colors.text} />} onPress={() => router.push('/goal-new')} height={40} style={{ minWidth: 84 }} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Add new goal" onPress={() => router.push('/goal-new')}
+              style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+              <Feather name="plus" size={19} color={colors.white} />
+            </Pressable>
           }
         />
       }
     >
-      <View style={{ backgroundColor: colors.savingsTint, borderRadius: 22, padding: 16, gap: 2 }}>
-        <AppText variant="caption" color={colors.textSoft}>
-          Saved across {goals.length} goals
+      {goals.length === 0 ? (
+        <EmptyState
+          title="Start your first goal"
+          description="Create a savings goal and track your progress along the way."
+          actionLabel="Add goal"
+          onAction={() => router.push('/goal-new')}
+        />
+      ) : (
+      <>
+      <View style={{ backgroundColor: colors.ink, borderRadius: radius.hero, padding: 18, gap: 8 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <AppText variant="caption" color={colors.onInkMuted}>Saved across {goals.length} goals</AppText>
+            <Money paise={saved} variant="display" color={colors.white} style={{ fontSize: 30 }} />
+          </View>
+          <View style={{ alignItems: 'flex-end', gap: 2 }}>
+            <AppText variant="caption" color={colors.onInkMuted}>GOAL TARGET</AppText>
+            <Money paise={target} variant="subheading" color={colors.mint} />
+          </View>
+        </View>
+        <ProgressBar ratio={target ? saved / target : 0} color={colors.mint} track="rgba(255,255,255,0.15)" height={5} />
+        <AppText variant="caption" color={colors.onInkMuted}>
+          {`${activeGoals} active · ${goals.length} total`}
         </AppText>
-        <Money paise={saved} variant="display" color={colors.savingsText} style={{ fontSize: 30 }} />
       </View>
       <View style={{ gap: 12 }}>
         {goals.map((g) => (
@@ -132,6 +158,8 @@ export default function Goals() {
           />
         ))}
       </View>
+      </>
+      )}
     </Screen>
   );
 }

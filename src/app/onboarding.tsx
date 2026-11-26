@@ -14,6 +14,7 @@ import { useEntries } from '@/store/entries';
 import { formatINR, toPaise } from '@/lib/money';
 import { fullMonth } from '@/lib/dates';
 import { flushOnboarding } from '@/lib/onboardingQueue';
+import type { Entry } from '@/types';
 
 const LINES = [
   { name: 'Rent & home', category: 'Rent', share: 0.28, icon: 'home' as const },
@@ -39,18 +40,23 @@ export default function Onboarding() {
   const needs = useMemo(() => amounts.reduce((sum, v) => sum + v, 0), [amounts]);
 
   const suggest = () => setAmounts(LINES.map((line) => Math.round(amount * line.share)));
-  const finish = () => {
-    const rows = LINES.map((line, i) => ({ kind: 'planned' as const, type: line.type ?? 'expense' as const, amountPaise: toPaise(amounts[i] ?? 0), category: line.category, month }));
-    const created = addMany([...rows, { kind: 'planned', type: 'income', amountPaise: toPaise(amount), category: 'Salary', month }]);
+  const finishSetup = (created: Entry[]) => {
     const userId = useAuth.getState().user?.id;
     void completeSetup(created).then(() => {
       if (userId) return flushOnboarding(userId);
     }).catch(() => {});
     router.replace('/(tabs)');
   };
+  const finish = () => {
+    const rows = LINES.map((line, i) => ({ kind: 'planned' as const, type: line.type ?? 'expense' as const, amountPaise: toPaise(amounts[i] ?? 0), category: line.category, month }));
+    const created = addMany([...rows, { kind: 'planned', type: 'income', amountPaise: toPaise(amount), category: 'Salary', month }]);
+    finishSetup(created);
+  };
+  const skipPlan = () => finishSetup([]);
 
   return (
-    <Screen tabBar={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 24) + 16 }}>
+    <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+    <Screen tabBar={false} contentContainerStyle={{ paddingBottom: step === 2 ? Math.max(insets.bottom, 16) + 76 : Math.max(insets.bottom, 24) + 16 }}>
       <View style={{ gap: 14 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {[1, 2, 3].map((n) => <View key={n} style={{ height: 5, flex: 1, borderRadius: 5, backgroundColor: n <= step ? colors.primary : colors.track }} />)}
@@ -81,10 +87,14 @@ export default function Onboarding() {
           <View style={{ alignItems: 'flex-end' }}><AppText variant="subheading">{formatINR(toPaise(amounts[i] ?? 0))}</AppText><AppText variant="caption" color={colors.muted}>{Math.round(((amounts[i] ?? 0) / Math.max(amount, 1)) * 100)}%</AppText></View><Feather name="chevron-right" size={16} color={colors.muted} />
         </Pressable>)}
         <AppText variant="caption" color={colors.muted}>Suggested for {fullMonth(month)} · You can edit the plan anytime.</AppText>
-        <Button label="Save my plan" onPress={finish} />
       </View> : null}
 
       {step === 3 && adjusting !== null ? <View style={{ marginTop: 24, gap: 18 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to suggested plan" onPress={() => setStep(2)}
+          style={{ alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Feather name="chevron-left" size={20} color={colors.primary} />
+          <AppText variant="subheading" color={colors.primary}>Back to plan</AppText>
+        </Pressable>
         <Card style={{ gap: 12 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><Feather name={LINES[adjusting].icon} size={18} color={colors.primary} /><AppText variant="heading">{LINES[adjusting].name}</AppText></View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Pressable accessibilityLabel="Decrease amount" onPress={() => setAmounts((prev) => prev.map((v, i) => i === adjusting ? Math.max(0, v - 500) : v))} style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}><Feather name="minus" size={18} color={colors.primary} /></Pressable>
@@ -97,5 +107,14 @@ export default function Onboarding() {
         <Button label="Save amount" onPress={() => setStep(2)} />
       </View> : null}
     </Screen>
+    {step === 2 ? (
+      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 10, paddingBottom: Math.max(insets.bottom, 16), backgroundColor: colors.canvas }}>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Button variant="outline" label="Skip plan" onPress={skipPlan} style={{ flex: 1 }} />
+          <Button label="Save my plan" onPress={finish} style={{ flex: 1 }} />
+        </View>
+      </View>
+    ) : null}
+    </View>
   );
 }

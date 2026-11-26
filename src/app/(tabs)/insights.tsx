@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { useMemo } from 'react';
+import { View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '@/theme';
 import { Screen } from '@/components/Screen';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
-import { MonthMenu } from '@/components/MonthMenu';
 import { Donut, DONUT_COLORS } from '@/components/charts/Donut';
 import { BarChart } from '@/components/charts/BarChart';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -15,15 +15,14 @@ import { useUi } from '@/store/ui';
 import { byCategory, monthlyHistory, total } from '@/lib/selectors';
 import { getLoanOverview } from '@/lib/emi';
 import { formatINR } from '@/lib/money';
-import { fullMonth, labelMonth, shortMonth } from '@/lib/dates';
+import { labelMonth, shortMonth } from '@/lib/dates';
 import { typeStyle } from '@/components/EntryRow';
 
 export default function Insights() {
   const entries = useEntries((s) => s.entries);
-  const { month, setMonth } = useUi();
+  const month = useUi((state) => state.month);
   const loans = useLoans((s) => s.loans);
   const loanPayments = useLoans((s) => s.payments);
-  const [monthMenu, setMonthMenu] = useState(false);
 
   const d = useMemo(() => {
     const cats = byCategory(entries, month, 'expense').filter((c) => c.actual > 0).sort((a, b) => b.actual - a.actual);
@@ -54,22 +53,11 @@ export default function Insights() {
     return { emi, income, ratio, band, remainingInterest, payoffMonth };
   }, [loans, loanPayments, entries, month]);
 
-  const header = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <AppText variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={{ flex: 1 }}>Insights</AppText>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Change month, currently ${fullMonth(month)}`} onPress={() => setMonthMenu(true)}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 3, minHeight: 28 }}>
-        <AppText variant="heading" style={{ fontSize: 15 }}>{fullMonth(month)}</AppText>
-        <Feather name="chevron-down" size={15} color={colors.text} />
-      </Pressable>
-    </View>
-  );
+  const header = <ScreenHeader title="Insights" />;
 
   return (
     <>
       <Screen header={header}>
-      <MonthMenu visible={monthMenu} month={month} onChange={setMonth} onClose={() => setMonthMenu(false)} />
-
       <Card style={{ gap: 12 }}>
         <AppText variant="subheading">Where your money went</AppText>
         {d.cats.length === 0 ? <AppText color={colors.muted} variant="caption">No spending logged this month.</AppText> : (

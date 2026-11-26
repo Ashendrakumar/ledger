@@ -18,7 +18,7 @@ type TabBarProps = {
 
 const TABS: Record<string, { label: string; filled: React.ComponentProps<typeof Ionicons>['name']; outline: React.ComponentProps<typeof Ionicons>['name'] }> = {
   index: { label: 'Home', filled: 'home', outline: 'home-outline' },
-  activity: { label: 'Activity', filled: 'list', outline: 'list-outline' },
+  activity: { label: 'Actual', filled: 'list', outline: 'list-outline' },
   plan: { label: 'Plan', filled: 'calendar', outline: 'calendar-outline' },
   insights: { label: 'Insights', filled: 'pie-chart', outline: 'pie-chart-outline' },
 };

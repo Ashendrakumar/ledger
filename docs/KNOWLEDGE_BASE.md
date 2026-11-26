@@ -4,9 +4,9 @@
 > a store, or a pattern worth reusing. If you changed `src/components/ui/*`,
 > this file is out of date the moment your diff lands.
 
-**Stack (Expo SDK 57 — do not trust memory for SDK 57 APIs):**
-Expo SDK 57 · React Native 0.86 · TypeScript · Expo Router (file-based) · zustand + AsyncStorage ·
-Reanimated 4 · react-native-gesture-handler 2 · react-native-svg · expo-haptics ·
+**Stack (Expo SDK 58 — do not trust memory for SDK 58 APIs):**
+Expo SDK 58 · React Native 0.88 · TypeScript · Expo Router (file-based) · zustand + AsyncStorage ·
+Reanimated 4 · react-native-gesture-handler 3 · react-native-svg · expo-haptics ·
 Plus Jakarta Sans · Node ≥ 20.19.4.
 
 ---
@@ -26,8 +26,8 @@ the Ledger app, not a general-purpose code generator.
 - Verifying your work: `npx tsc --noEmit` and `npx expo lint` must pass before you
   call anything done (pre-existing failures are listed in §9 — do not "fix" them
   silently).
-- Reading current docs before touching Expo/EAS APIs: `https://docs.expo.dev/versions/v57.0.0/`.
-  SDK 57 ships breaking changes; APIs remembered from older SDKs are likely wrong.
+- Reading current docs before touching Expo/EAS APIs: `https://docs.expo.dev/versions/v58.0.0/`.
+  SDK 58 ships breaking changes; APIs remembered from older SDKs are likely wrong.
   Use `npx expo install <pkg>` to get SDK-compatible versions.
 
 ### What you do NOT do
@@ -227,9 +227,9 @@ for cheap pressed feedback when you want it.
 
 ---
 
-## 8. Expo / RN 57 practical notes
+## 8. Expo / RN 58 practical notes
 
-- **Docs first**: `https://docs.expo.dev/versions/v57.0.0/`. For anything non-obvious, fetch the
+- **Docs first**: `https://docs.expo.dev/versions/v58.0.0/`. For anything non-obvious, fetch the
   page (e.g. `/sdk/reanimated/`). Never answer Expo API questions from memory.
 - **Reanimated 4**: no babel plugin needed (`babel-preset-expo` handles it), requires
   `react-native-worklets` (already installed). Animate `Pressable` via
@@ -277,3 +277,10 @@ Everything else flagged by `expo lint` is a regression — fix it.
 - [ ] ≥ 44px touch target; icon-only sites (chevrons, avatars) use a fixed `width`/`height` ≥ 44
 - [ ] Text centered (`includeFontPadding: false` pipeline — reuse it, never reimplement)
 - [ ] Colors from `theme.colors`, typography from `AppText` variants / the button's own label style
+
+## 12. Temporary development sign-in bypass
+
+- The login screen currently uses a local mock user when `__DEV__` is true. Production builds
+  continue to use email OTP authentication.
+- Keep this bypass only for active development and testing. Once development is complete,
+  remove the mock sign-in path and mock-only helpers, then verify release builds use OTP only.

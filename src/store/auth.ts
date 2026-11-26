@@ -5,6 +5,8 @@ import { storage } from './persist';
 import { ApiError, getAccessToken, logoutSession, refreshSession, requestEmailCode, setAccessToken, verifyEmailCode } from '@/lib/api';
 import { clearRefreshToken, getRefreshToken, setRefreshToken } from '@/lib/authTokens';
 import { queueOnboarding } from '@/lib/onboardingQueue';
+import { MOCK_USER_ID } from '@/lib/mockAuth';
+import { resetMockAppData } from '@/lib/resetMockAppData';
 
 interface AuthState {
   user: User | null;
@@ -14,6 +16,7 @@ interface AuthState {
   sessionChecked: boolean;
   completeSetup: (entries: Entry[]) => Promise<void>;
   requestCode: (email: string) => Promise<void>;
+  signInWithMockUser: (email: string) => Promise<void>;
   signIn: (email: string, code: string) => Promise<void>;
   restoreSession: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -31,9 +34,18 @@ export const useAuth = create<AuthState>()(
       completeSetup: async (entries) => {
         set({ setupComplete: true });
         const userId = get().user?.id;
-        if (userId && entries.length) await queueOnboarding(userId, entries);
+        if (userId) await queueOnboarding(userId, entries);
       },
       requestCode: async (email) => { await requestEmailCode(email.trim().toLowerCase()); },
+      signInWithMockUser: async (email) => {
+        if (!__DEV__) throw new Error('Mock sign-in is only available in development.');
+        await resetMockAppData();
+        set({
+          user: { id: MOCK_USER_ID, email: email.trim().toLowerCase(), name: 'Demo User' },
+          setupComplete: false,
+          sessionChecked: true,
+        });
+      },
       signIn: async (email, code) => {
         const result = await verifyEmailCode(email.trim().toLowerCase(), code);
         await setRefreshToken(result.tokens.refreshToken);

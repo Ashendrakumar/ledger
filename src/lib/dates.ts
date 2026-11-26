@@ -16,6 +16,17 @@ export const shortMonth = (key: string) => MONTHS[Number(key.split('-')[1]) - 1]
 export const labelMonth = (key: string) => `${shortMonth(key)} ${key.split('-')[0]}`;
 export const fullMonth = (key: string) => `${FULL[Number(key.split('-')[1]) - 1]} ${key.split('-')[0]}`;
 
+export function dateHeading(key: string): string {
+  if (/^\d{4}-\d{2}$/.test(key)) return fullMonth(key);
+  const [year, month, day] = key.split('-').map(Number);
+  if (!year || !month || !day) return key;
+  return new Date(year, month - 1, day).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+  });
+}
+
 export function relativeDay(iso: string, today = todayISO()): string {
   if (iso === today) return 'Today';
   const y = new Date(today);
