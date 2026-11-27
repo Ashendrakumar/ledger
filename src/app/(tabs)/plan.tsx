@@ -21,6 +21,7 @@ import { useEntries } from '@/store/entries';
 import { useLoans } from '@/store/loans';
 import { useUi } from '@/store/ui';
 import { total, inMonth } from '@/lib/selectors';
+import { fullMonth, shiftMonth } from '@/lib/dates';
 import { buildSchedule } from '@/lib/emi';
 import { formatINR } from '@/lib/money';
 import type { Entry, EntryType } from '@/types';
@@ -30,7 +31,7 @@ const GROUPS: { type: EntryType; title: string }[] = [
 ];
 
 export default function Plan() {
-  const { entries, remove } = useEntries();
+  const { entries, remove, copyPlanFromPrevious } = useEntries();
   const { loans, payments } = useLoans();
   const month = useUi((state) => state.month);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -119,7 +120,7 @@ export default function Plan() {
         </View>
       </View> : null}
 
-      {!accumulated ? (
+      {!accumulated && (planned.length > 0 || normalizedQuery.length > 0) ? (
         <EntryListControls
           query={query}
           onQueryChange={setQuery}
@@ -129,7 +130,7 @@ export default function Plan() {
           onToggleAccumulated={showAccumulated}
         />
       ) : null}
-      {!accumulated ? <EntryListSummary label={summaryLabel} count={filteredPlanned.length} totalPaise={summaryTotal} /> : null}
+      {!accumulated && (planned.length > 0 || normalizedQuery.length > 0) ? <EntryListSummary label={summaryLabel} count={filteredPlanned.length} totalPaise={summaryTotal} /> : null}
 
       {accumulated ? <>
         {GROUPS.map((g) => {
@@ -203,10 +204,14 @@ export default function Plan() {
         <View style={{ marginTop: -4 }}>
           {filteredPlanned.length === 0 ? (
             <EmptyState
-              title={planned.length === 0 ? 'Your plan starts here' : 'No matching entries'}
-              description={planned.length === 0 ? 'Add your first planned entry to make a plan for this month.' : 'Try changing your search or filter, or add a planned entry.'}
+              title={planned.length === 0 ? `Nothing planned for ${fullMonth(month)}` : 'No matching entries'}
+              description={planned.length === 0 ? 'Plan your rent, food, travel and savings so you can see how you are doing against it.' : 'Try changing your search or filter, or add a planned entry.'}
               actionLabel="Add planned entry"
               onAction={() => router.push({ pathname: '/add', params: { kind: 'planned' } })}
+              variant={planned.length === 0 ? 'planned' : undefined}
+              secondaryLabel={planned.length === 0 ? `Copy plan from ${fullMonth(shiftMonth(month, -1))}` : undefined}
+              onSecondary={planned.length === 0 ? () => copyPlanFromPrevious(month) : undefined}
+              hint={planned.length === 0 ? 'Or build a standard plan from your income.' : undefined}
             />
           ) : (
             <View style={{ gap: 6 }}>

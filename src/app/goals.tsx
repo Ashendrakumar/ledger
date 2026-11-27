@@ -128,6 +128,8 @@ export default function Goals() {
           description="Create a savings goal and track your progress along the way."
           actionLabel="Add goal"
           onAction={() => router.push('/goal-new')}
+          variant="goal"
+          hint="You can add any amount to a goal at any time."
         />
       ) : (
       <>

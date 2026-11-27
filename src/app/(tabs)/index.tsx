@@ -243,11 +243,11 @@ export default function Home() {
       </View>
       {d.recent.length === 0 ? (
         <EmptyState
-          compact
           title="No recent entries"
-          description="Add an entry to start tracking this month."
-          actionLabel="Add entry"
+          description="Your transactions will appear here once you start tracking this month."
+          actionLabel="Add transaction"
           onAction={() => router.push('/add')}
+          variant="actual"
         />
       ) : (
       <Card style={{ padding: 0, overflow: 'hidden' }}>

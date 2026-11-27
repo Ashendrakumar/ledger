@@ -166,6 +166,8 @@ export default function Loans() {
           description="Add a loan to track its EMI, interest, and repayment progress."
           actionLabel="Add loan"
           onAction={() => router.push('/loan-new')}
+          variant="loan"
+          hint="Paid EMIs are added to your expenses automatically."
         />
       ) : (
         <>
