@@ -7,6 +7,8 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/auth';
 import { ApiError } from '@/lib/api';
+import { isMockMode } from '@/lib/appMode';
+import { useToast } from '@/components/ui/Toast';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -15,25 +17,24 @@ export default function Login() {
   const requestCode = useAuth((s) => s.requestCode);
   const signInWithMockUser = useAuth((s) => s.signInWithMockUser);
   const signIn = useAuth((s) => s.signIn);
+  const { showError } = useToast();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const valid = EMAIL_RE.test(email.trim());
 
   const sendCode = async () => {
     setBusy(true);
-    setError('');
     try {
-      if (__DEV__) {
+      if (isMockMode) {
         await signInWithMockUser(email);
         return;
       }
       await requestCode(email);
       setStep('code');
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : __DEV__ ? 'Could not reset demo data. Please try again.' : 'Could not send a code. Please try again.');
+      showError(cause instanceof ApiError ? cause.message : isMockMode ? 'Could not start the demo account. Please try again.' : 'Could not send a code. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -41,11 +42,10 @@ export default function Login() {
 
   const verifyCode = async () => {
     setBusy(true);
-    setError('');
     try {
       await signIn(email, code);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not verify the code. Please try again.');
+      showError(cause instanceof ApiError ? cause.message : 'Could not verify the code. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -88,9 +88,11 @@ export default function Login() {
                 style={{ flex: 1, fontFamily: font.semibold, fontSize: 15, color: colors.text }}
               />
             </View>
-            <Button label={__DEV__ ? 'Continue with email (mock)' : 'Continue with email'} disabled={!valid} loading={busy} height={56} onPress={() => { void sendCode(); }}
+            <Button label={isMockMode ? 'Continue with demo account' : 'Continue with email'} disabled={!valid} loading={busy} height={56} onPress={() => { void sendCode(); }}
               icon={<Feather name="arrow-right" size={18} color={colors.mint} />} />
-            <AppText variant="caption" color={colors.muted}>{__DEV__ ? 'Development mode: continue with a local demo user.' : 'We will email you a 6-digit code. No password to remember.'}</AppText>
+            <AppText variant="caption" color={colors.muted}>
+              {isMockMode ? 'Demo mode: your data stays on this device.' : 'We will email you a 6-digit code. No password to remember.'}
+            </AppText>
           </>
         ) : (
           <>
@@ -111,7 +113,6 @@ export default function Login() {
             </Pressable>
           </>
         )}
-        {error ? <AppText color={colors.danger} accessibilityRole="alert">{error}</AppText> : null}
       </View>
     </KeyboardAvoidingView>
   );

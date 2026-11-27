@@ -14,11 +14,12 @@ import { colors, isDark } from '@/theme';
 import { useAuth } from '@/store/auth';
 import { useSettings } from '@/store/settings';
 import { AppLockGate } from '@/components/AppLockGate';
+import { ToastProvider } from '@/components/ui/Toast';
 import { initEmiReminderSync } from '@/lib/reminders';
 import { initBudgetAlertSync } from '@/lib/budgetAlerts';
 import { flushOnboarding } from '@/lib/onboardingQueue';
 import { startDataSync } from '@/lib/dataSync';
-import { isMockUserId } from '@/lib/mockAuth';
+import { isMockUserId } from '@/lib/appMode';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -84,6 +85,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style={isDark() ? 'light' : 'dark'} />
+        <ToastProvider>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="(auth)" />
@@ -107,6 +109,7 @@ export default function RootLayout() {
           </Stack.Protected>
         </Stack>
         <AppLockGate />
+        </ToastProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

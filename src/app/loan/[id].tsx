@@ -21,6 +21,7 @@ import { formatINR, toPaise } from '@/lib/money';
 import { labelMonth, todayISO } from '@/lib/dates';
 import type { LoanScheduleRow, RowStatus } from '@/lib/emi';
 import type { LoanPayment, PaymentKind } from '@/types';
+import { useToast } from '@/components/ui/Toast';
 
 const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
@@ -61,6 +62,7 @@ function StatTile({ label, value, color }: { label: string; value: string; color
 type Tab = 'schedule' | 'payments';
 
 export default function LoanDetail() {
+  const { showError } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { loans, payments, markPayment, removePayment, remove } = useLoans();
   const { add: addEntry, removeLoanPaymentEntries } = useEntries();
@@ -126,7 +128,7 @@ export default function LoanDetail() {
     const month = targetMonth;
     if (!month || !(v > 0)) return;
     if (segment === 'actual' && !DATE_RE.test(date)) {
-      Alert.alert('Invalid date', 'Use the format YYYY-MM-DD.');
+      showError('Enter a valid date in YYYY-MM-DD format.');
       return;
     }
     const paid = markPayment({ loanId: loan.id, month, amountPaise: toPaise(v), kind: segment, date: segment === 'actual' ? date : undefined });
@@ -138,7 +140,7 @@ export default function LoanDetail() {
     const month = sheetMonth ?? next?.month;
     if (!month || !(v > 0)) return;
     if (seg === 'actual' && !DATE_RE.test(payDate)) {
-      Alert.alert('Invalid date', 'Use the format YYYY-MM-DD.');
+      showError('Enter a valid date in YYYY-MM-DD format.');
       return;
     }
     const paid = markPayment({ loanId: loan.id, month, amountPaise: toPaise(v), kind: seg, date: seg === 'actual' ? payDate : undefined });

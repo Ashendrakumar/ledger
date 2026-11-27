@@ -28,6 +28,7 @@ import { requestBudgetAlertPermission } from '@/lib/budgetAlerts';
 import { useUi } from '@/store/ui';
 import { fullMonth, shiftMonth } from '@/lib/dates';
 import { inMonth } from '@/lib/selectors';
+import { useToast } from '@/components/ui/Toast';
 
 function Row({ label, right, onPress, first }: { label: string; right?: React.ReactNode; onPress?: () => void; first?: boolean }) {
   return (
@@ -47,6 +48,7 @@ const Group = ({ title, children }: { title: string; children: React.ReactNode }
 
 export default function Settings() {
   const { user, signOut } = useAuth();
+  const { showError } = useToast();
   const s = useSettings();
   const { entries, clearAll, loadSample, addMany, copyPlanFromPrevious } = useEntries();
   const loans = useLoans((x) => x.loans);
@@ -59,9 +61,9 @@ export default function Settings() {
 
   const exportCsv = async () => {
     try {
-      if (!(await shareCsv(entries, loans, loanPayments))) Alert.alert('Sharing is not available on this device.');
+      if (!(await shareCsv(entries, loans, loanPayments))) showError('Sharing is not available on this device.');
     } catch {
-      Alert.alert('Could not export', 'Please try again.');
+      showError('Could not export. Please try again.');
     }
   };
   const exportAccountJson = async () => {
@@ -75,12 +77,12 @@ export default function Settings() {
       file.create({ overwrite: true });
       await file.write(JSON.stringify(data, null, 2));
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('Sharing is not available on this device.');
+        showError('Sharing is not available on this device.');
         return;
       }
       await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Export Ledger account data' });
     } catch (error) {
-      Alert.alert('Could not export account data', error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Please try again.');
+      showError(`Could not export account data. ${error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Please try again.'}`);
     }
   };
   const importCsv = async () => {
@@ -89,13 +91,13 @@ export default function Settings() {
       if (result.canceled) return;
       const imported = parseCsv(await result.result.text());
       if (!imported.length) {
-        Alert.alert('No entries found in the CSV file.');
+        showError('No entries found in the CSV file.');
         return;
       }
       addMany(imported);
       Alert.alert('Imported', `${imported.length} entries added to the ledger.`);
     } catch {
-      Alert.alert('Could not import', 'Please try again.');
+      showError('Could not import. Please try again.');
     }
   };
   const copyPreviousPlan = () => {
@@ -112,7 +114,7 @@ export default function Settings() {
   const toggleLock = async (on: boolean) => {
     if (!on) return s.set('appLock', false);
     if (!(await canAuthenticate())) {
-      Alert.alert('App lock needs a screen lock', 'Set up Face ID, a fingerprint or a passcode in your device settings first.');
+      showError('Set up Face ID, a fingerprint, or a passcode in your device settings first.');
       return;
     }
     if (await authenticate('Turn on app lock')) s.set('appLock', true);
@@ -126,7 +128,7 @@ export default function Settings() {
     s.set('billReminders', true);
     setRemindersDenied(!granted);
     if (!granted) {
-      Alert.alert('Notifications disabled', 'EMI reminders need notification access. Enable it for Ledger in system settings to get due-date alerts.');
+      showError('Enable notifications for Ledger to receive EMI reminders.');
     }
   };
   const toggleBudgetAlerts = async (on: boolean) => {
@@ -137,7 +139,7 @@ export default function Settings() {
     const granted = await requestBudgetAlertPermission();
     s.set('budgetAlerts', true);
     setBudgetAlertsDenied(!granted);
-    if (!granted) Alert.alert('Notifications disabled', 'Budget alerts need notification access. Enable it for Ledger in system settings to get spending updates.');
+    if (!granted) showError('Enable notifications for Ledger to receive budget alerts.');
   };
   const openTheme = () =>
     Alert.alert('Theme', `Current: ${mode === 'auto' ? 'System default' : mode}`, [
@@ -166,7 +168,7 @@ export default function Settings() {
           router.replace('/(auth)');
           Alert.alert('Account deleted', 'Your account and synced financial records were deleted.');
         })().catch((error: unknown) => {
-          Alert.alert('Could not delete account', error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Please try again.');
+          showError(`Could not delete account. ${error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Please try again.'}`);
         });
       } },
     ],

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, TextInput, View } from 'react-native';
+import { Pressable, TextInput, View } from 'react-native';
 import { colors, font } from '@/theme';
 import { AppText } from './ui/AppText';
 import { DateField } from './ui/DateField';
@@ -8,6 +8,7 @@ import { Segmented } from './ui/Segmented';
 import { Sheet } from './ui/Sheet';
 import { labelMonth, todayISO } from '@/lib/dates';
 import type { Loan, LoanPayment } from '@/types';
+import { useToast } from './ui/Toast';
 
 const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
@@ -27,6 +28,7 @@ export function LoanPaymentSheet({
   onDelete?: (payment: LoanPayment) => void;
   onClose: () => void;
 }) {
+  const { showError } = useToast();
   // Initialize from the existing payment (or the EMI default) — the parent keys the
   // sheet by the open month so this mounts when the sheet opens.
   const [segment, setSegment] = useState<'actual' | 'planned'>(() => (existing?.kind === 'planned' ? 'planned' : 'actual'));
@@ -38,11 +40,11 @@ export function LoanPaymentSheet({
   const save = () => {
     const v = parseFloat(amount);
     if (!(v > 0)) {
-      Alert.alert('Enter an amount');
+      showError('Enter an amount greater than zero.');
       return;
     }
     if (segment === 'actual' && !DATE_RE.test(date)) {
-      Alert.alert('Invalid date', 'Use the format YYYY-MM-DD.');
+      showError('Enter a valid date in YYYY-MM-DD format.');
       return;
     }
     onSave(segment, amount, date);

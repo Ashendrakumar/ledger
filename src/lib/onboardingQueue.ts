@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Entry } from '@/types';
 import { ApiError, completeOnboarding } from './api';
-import { isMockUserId } from './mockAuth';
+import { isMockUserId } from './appMode';
 
 const keyFor = (userId: string) => `ledger.pending-onboarding.${userId}`;
 
