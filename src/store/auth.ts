@@ -1,27 +1,69 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import { GoogleOneTapSignIn } from 'react-native-nitro-google-signin';
+import {
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithCredential,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updateProfile,
+  type User as FirebaseUser,
+} from 'firebase/auth';
 import type { Entry, User } from '@/types';
+import { auth } from '@/lib/firebase';
+import { loadSetupComplete, markSetupComplete } from '@/lib/firebaseData';
 import { storage } from './persist';
-import { ApiError, getAccessToken, logoutSession, refreshSession, requestEmailCode, setAccessToken, verifyEmailCode } from '@/lib/api';
-import { clearRefreshToken, getRefreshToken, setRefreshToken } from '@/lib/authTokens';
-import { queueOnboarding } from '@/lib/onboardingQueue';
 import { isMockMode, MOCK_USER_ID } from '@/lib/appMode';
 
 interface AuthState {
   user: User | null;
-  /** True once persisted state has been read from disk. */
   hydrated: boolean;
   setupComplete: boolean;
   sessionChecked: boolean;
   completeSetup: (entries: Entry[]) => Promise<void>;
-  requestCode: (email: string) => Promise<void>;
   signInWithMockUser: (email: string) => Promise<void>;
-  signIn: (email: string, code: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  createAccount: (email: string, password: string) => Promise<void>;
+  signInWithGoogleToken: (idToken: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   restoreSession: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 let sessionRestore: Promise<void> | null = null;
+
+function mapUser(user: FirebaseUser): User {
+  return {
+    id: user.uid,
+    email: user.email ?? '',
+    ...(user.displayName ? { name: user.displayName } : {}),
+  };
+}
+
+async function storeFirebaseUser(user: FirebaseUser) {
+  const previous = useAuth.getState();
+  if (previous.user?.id !== MOCK_USER_ID && previous.user?.email?.toLowerCase() === user.email?.toLowerCase() && previous.user.id !== user.uid) {
+    await AsyncStorage.setItem('ledger.firestore-claim-local-once', user.uid);
+  }
+  const sameLegacyAccount = previous.user?.email?.toLowerCase() === user.email?.toLowerCase();
+  let setupComplete = (previous.user?.id === user.uid || sameLegacyAccount) && previous.setupComplete;
+  try {
+    setupComplete = await loadSetupComplete(user, setupComplete);
+  } catch {
+    // Auth remains available if the profile write is offline or rules have not
+    // been deployed yet. The locally persisted onboarding state is retained.
+  }
+  useAuth.setState({ user: mapUser(user), setupComplete, sessionChecked: true });
+}
+
+async function afterSignIn(user: FirebaseUser) {
+  await storeFirebaseUser(user);
+}
 
 export const useAuth = create<AuthState>()(
   persist(
@@ -30,87 +72,87 @@ export const useAuth = create<AuthState>()(
       hydrated: false,
       setupComplete: false,
       sessionChecked: false,
-      completeSetup: async (entries) => {
+      completeSetup: async () => {
         set({ setupComplete: true });
-        const userId = get().user?.id;
-        if (userId) await queueOnboarding(userId, entries);
+        const current = auth.currentUser;
+        if (current) await markSetupComplete(current.uid, current.displayName);
       },
-      requestCode: async (email) => { await requestEmailCode(email.trim().toLowerCase()); },
       signInWithMockUser: async (email) => {
         if (!__DEV__ || !isMockMode) throw new Error('Mock sign-in is not enabled.');
-        setAccessToken(null);
         set({
           user: { id: MOCK_USER_ID, email: email.trim().toLowerCase(), name: 'Demo User' },
           setupComplete: false,
           sessionChecked: true,
         });
       },
-      signIn: async (email, code) => {
-        const result = await verifyEmailCode(email.trim().toLowerCase(), code);
-        await setRefreshToken(result.tokens.refreshToken);
-        setAccessToken(result.tokens.accessToken);
-        set({
-          user: { id: result.user.id, email: result.user.email, name: result.user.name },
-          setupComplete: Boolean(result.user.setupCompleted),
-          sessionChecked: true,
-        });
+      signIn: async (email, password) => {
+        const credential = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+        await afterSignIn(credential.user);
+      },
+      createAccount: async (email, password) => {
+        const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+        await afterSignIn(credential.user);
+      },
+      signInWithGoogleToken: async (idToken) => {
+        const credential = GoogleAuthProvider.credential(idToken);
+        const result = await signInWithCredential(auth, credential);
+        await afterSignIn(result.user);
+      },
+      resetPassword: async (email) => {
+        await sendPasswordResetEmail(auth, email.trim().toLowerCase());
       },
       restoreSession: async () => {
         if (!get().hydrated || get().sessionChecked) return;
         if (sessionRestore) return sessionRestore;
-        sessionRestore = (async () => {
-          if (isMockMode) {
-            const user = get().user;
-            setAccessToken(null);
-            set({
-              user: user ? { ...user, id: MOCK_USER_ID } : null,
-              sessionChecked: true,
-            });
-            return;
-          }
-          try {
-            const refreshToken = await getRefreshToken();
-            if (!refreshToken) {
+        sessionRestore = new Promise<void>((resolve) => {
+          let unsubscribe = () => {};
+          unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            unsubscribe();
+            if (!firebaseUser) {
               set({ user: null, setupComplete: false, sessionChecked: true });
+              resolve();
               return;
             }
-            const result = await refreshSession(refreshToken);
-            await setRefreshToken(result.tokens.refreshToken);
-            setAccessToken(result.tokens.accessToken);
-            set({
-              user: { id: result.user.id, email: result.user.email, name: result.user.name },
-              setupComplete: Boolean(result.user.setupCompleted) || get().setupComplete,
-              sessionChecked: true,
-            });
-          } catch (error) {
-            if (error instanceof ApiError && error.status === 401) {
-              await clearRefreshToken().catch(() => {});
-              setAccessToken(null);
-              set({ user: null, setupComplete: false });
-            }
-            // Keep a previously signed-in local cache available while offline.
+            void storeFirebaseUser(firebaseUser).finally(resolve);
+          }, () => {
+            unsubscribe();
             set({ sessionChecked: true });
-          }
-        })();
-        try { await sessionRestore; } finally { sessionRestore = null; }
+            resolve();
+          });
+        });
+        try {
+          await sessionRestore;
+        } finally {
+          sessionRestore = null;
+        }
       },
       signOut: async () => {
-        const refreshToken = await getRefreshToken().catch(() => null);
-        const accessToken = getAccessToken();
-        if (refreshToken && accessToken) {
-          try { await logoutSession(refreshToken, accessToken); } catch { /* Local sign-out must work offline. */ }
-        }
-        await clearRefreshToken().catch(() => {});
-        setAccessToken(null);
-        set({ user: null, setupComplete: false });
+        await firebaseSignOut(auth);
+        if (Platform.OS !== 'web') await GoogleOneTapSignIn.signOut().catch(() => {});
+        set({ user: null, setupComplete: false, sessionChecked: true });
       },
     }),
     {
       name: 'ledger.auth',
       storage,
+      // Keep the prior version so an existing custom-backend session can be
+      // read once and its local records can be claimed by a matching Firebase account.
       version: 1,
-      partialize: (s) => ({ user: s.user, setupComplete: s.setupComplete }),
+      partialize: (state) => ({ user: state.user, setupComplete: state.setupComplete }),
       onRehydrateStorage: () => () => useAuth.setState({ hydrated: true }),
     },
   ),
 );
+
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+let GoogleSignin: any = null;
+if (!isExpoGo) {
+  try {
+    GoogleSignin = require('react-native-nitro-google-signin');
+  } catch (e) {
+    console.warn('Google Sign-In native module unavailable', e);
+  }
+}

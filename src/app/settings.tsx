@@ -18,9 +18,7 @@ import { useEntries } from '@/store/entries';
 import { useLoans } from '@/store/loans';
 import { useSettings } from '@/store/settings';
 import { useGoals } from '@/store/goals';
-import { ApiError, authenticatedRequest } from '@/lib/api';
-import { clearAccountDataCache, stopDataSync } from '@/lib/dataSync';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearAccountDataCache, deleteAccountData, exportAccountData, stopDataSync } from '@/lib/dataSync';
 import { shareCsv, parseCsv } from '@/lib/csv';
 import { authenticate, canAuthenticate } from '@/components/AppLockGate';
 import { requestEmiReminderPermission } from '@/lib/reminders';
@@ -30,11 +28,14 @@ import { fullMonth, shiftMonth } from '@/lib/dates';
 import { inMonth } from '@/lib/selectors';
 import { useToast } from '@/components/ui/Toast';
 
-function Row({ label, right, onPress, first }: { label: string; right?: React.ReactNode; onPress?: () => void; first?: boolean }) {
+function Row({ label, right, onPress, first, icon, iconColor }: { label: string; right?: React.ReactNode; onPress?: () => void; first?: boolean; icon?: React.ComponentProps<typeof Feather>['name']; iconColor?: string }) {
   return (
     <Pressable accessibilityRole={onPress ? 'button' : undefined} disabled={!onPress} onPress={onPress}
       style={{ minHeight: 50, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: first ? 0 : 1, borderTopColor: colors.border }}>
-      <AppText variant="body">{label}</AppText>
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        {icon ? <Feather name={icon} size={18} color={iconColor ?? colors.muted} /> : null}
+        <AppText variant="body">{label}</AppText>
+      </View>
       {right ?? (onPress ? <Feather name="chevron-right" size={18} color={colors.muted} /> : null)}
     </Pressable>
   );
@@ -72,7 +73,8 @@ export default function Settings() {
         Alert.alert('Unavailable on web', 'Download the account JSON backup from an iOS or Android device.');
         return;
       }
-      const data = await authenticatedRequest<Record<string, unknown>>('/me/export');
+      if (!user?.id) throw new Error('Sign in again to export your account data.');
+      const data = await exportAccountData(user.id);
       const file = new File(Paths.cache, `ledger-account-${Date.now()}.json`);
       file.create({ overwrite: true });
       await file.write(JSON.stringify(data, null, 2));
@@ -82,7 +84,7 @@ export default function Settings() {
       }
       await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Export Ledger account data' });
     } catch (error) {
-      showError(`Could not export account data. ${error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Please try again.'}`);
+      showError(`Could not export account data. ${error instanceof Error ? error.message : 'Please try again.'}`);
     }
   };
   const importCsv = async () => {
@@ -157,10 +159,10 @@ export default function Settings() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete account', style: 'destructive', onPress: () => {
         void (async () => {
-          await authenticatedRequest<void>('/me', { method: 'DELETE' });
           stopDataSync();
+          if (!user?.id) throw new Error('Sign in again to delete your account.');
+          await deleteAccountData(user.id);
           if (user?.id) await clearAccountDataCache(user.id);
-          if (user?.id) await AsyncStorage.removeItem(`ledger.pending-onboarding.${user.id}`).catch(() => {});
           useEntries.getState().clearAll();
           useGoals.setState({ goals: [] });
           useLoans.setState({ loans: [], payments: [] });
@@ -168,7 +170,10 @@ export default function Settings() {
           router.replace('/(auth)');
           Alert.alert('Account deleted', 'Your account and synced financial records were deleted.');
         })().catch((error: unknown) => {
-          showError(`Could not delete account. ${error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Please try again.'}`);
+          const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
+          showError(code.includes('requires-recent-login')
+            ? 'For account security, sign out and sign back in, then retry account deletion.'
+            : `Could not delete account. ${error instanceof Error ? error.message : 'Please try again.'}`);
         });
       } },
     ],
@@ -197,7 +202,13 @@ export default function Settings() {
           </View>
         } />
         <Row label="Hide amounts" right={<Toggle label="Hide amounts" value={s.hideAmounts} onValueChange={(v) => s.set('hideAmounts', v)} />} />
-        <Row label="Theme" right={<AppText color={colors.muted} variant="caption">{mode === 'auto' ? 'System' : mode}</AppText>} onPress={openTheme} />
+        <Row
+          label="Theme"
+          icon={mode === 'dark' ? 'moon' : mode === 'light' ? 'sun' : 'smartphone'}
+          iconColor={mode === 'dark' ? colors.mint : mode === 'light' ? colors.primary : colors.muted}
+          right={<AppText color={colors.muted} variant="caption">{mode === 'auto' ? 'System' : mode}</AppText>}
+          onPress={openTheme}
+        />
       </Group>
 
       <Group title="PLANNING">

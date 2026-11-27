@@ -1,52 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Entry, Goal, Loan, LoanPayment } from '@/types';
-import { authenticatedRequest, ApiError } from './api';
+import { deleteAccountData as deleteFirebaseAccountData, fetchAccountData, recordsRef, removeRecord, saveRecord, type DomainRecord, type Resource } from './firebaseData';
+import { getDocs, onSnapshot } from 'firebase/firestore';
 import { useEntries } from '@/store/entries';
 import { useGoals } from '@/store/goals';
 import { useLoans } from '@/store/loans';
 
-type Resource = 'entries' | 'goals' | 'loans' | 'loan-payments';
-type DomainRecord = Entry | Goal | Loan | LoanPayment;
 type Snapshot = { entries: Entry[]; goals: Goal[]; loans: Loan[]; payments: LoanPayment[] };
-type Change = {
-  opId: string;
-  resource: Resource;
-  id: string;
-  deleted: boolean;
-  queuedAt: string;
-  data?: Record<string, unknown>;
-};
-type RemoteRecord = Record<string, unknown> & { id?: string; clientId?: string; updatedAt?: string; deletedAt?: string };
-type CollectionPage<T> = { data: T[]; nextCursor: string | null };
-type BootstrapResponse = {
-  resources: {
-    entries: CollectionPage<RemoteRecord>;
-    goals: CollectionPage<RemoteRecord>;
-    loans: CollectionPage<RemoteRecord>;
-    'loan-payments': CollectionPage<RemoteRecord>;
-  };
-};
+type Change = { opId: string; resource: Resource; id: string; deleted: boolean; data?: DomainRecord };
 
 const ownerKey = 'ledger.domain-owner';
-const outboxKey = (userId: string) => `ledger.sync-outbox.${userId}`;
-const cacheKey = (userId: string) => `ledger.domain-cache.${userId}`;
-const cursorKey = (userId: string) => `ledger.sync-cursor.${userId}`;
-const bootstrapKey = (userId: string) => `ledger.sync-bootstrapped.${userId}`;
+const outboxKey = (uid: string) => `ledger.firestore-outbox.${uid}`;
+const cacheKey = (uid: string) => `ledger.domain-cache.${uid}`;
+const bootstrappedKey = (uid: string) => `ledger.firestore-bootstrapped.${uid}`;
+const claimLocalKey = 'ledger.firestore-claim-local-once';
 const emptySnapshot = (): Snapshot => ({ entries: [], goals: [], loans: [], payments: [] });
 
 let generation = 0;
 let activeUserId: string | null = null;
-const accountControllers = new Map<string, AbortController>();
 let suppressStoreEvents = false;
-let cycleInFlight: Promise<void> | null = null;
-let cycleInFlightUserId: string | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let activeCleanup: (() => void) | null = null;
 let retryCount = 0;
-
-function makeOpId() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
 
 function currentSnapshot(): Snapshot {
   return {
@@ -55,6 +30,10 @@ function currentSnapshot(): Snapshot {
     loans: useLoans.getState().loans,
     payments: useLoans.getState().payments,
   };
+}
+
+function recordsFor(snapshot: Snapshot): Record<Resource, DomainRecord[]> {
+  return { entries: snapshot.entries, goals: snapshot.goals, loans: snapshot.loans, 'loan-payments': snapshot.payments };
 }
 
 function applySnapshot(snapshot: Snapshot) {
@@ -79,42 +58,26 @@ async function persistSnapshot(snapshot: Snapshot) {
 async function waitForStoreHydration() {
   const stores = [useEntries, useGoals, useLoans];
   await Promise.all(stores.map((store) => new Promise<void>((resolve) => {
-    if (store.persist.hasHydrated()) {
-      resolve();
-      return;
-    }
-    const unsubscribe = store.persist.onFinishHydration(() => {
-      unsubscribe();
-      resolve();
-    });
+    if (store.persist.hasHydrated()) return resolve();
+    const unsubscribe = store.persist.onFinishHydration(() => { unsubscribe(); resolve(); });
   })));
 }
 
-async function activateAccount(userId: string): Promise<boolean> {
-  const previousUserId = await AsyncStorage.getItem(ownerKey);
-  if (previousUserId === userId) return false;
+async function activateAccount(uid: string) {
+  const previousUid = await AsyncStorage.getItem(ownerKey);
+  if (previousUid === uid) return;
   const current = currentSnapshot();
-  if (previousUserId) await AsyncStorage.setItem(cacheKey(previousUserId), JSON.stringify(current));
-  const stored = previousUserId ? await AsyncStorage.getItem(cacheKey(userId)) : null;
-  const next = stored ? JSON.parse(stored) as Snapshot : previousUserId ? emptySnapshot() : current;
+  if (previousUid) await AsyncStorage.setItem(cacheKey(previousUid), JSON.stringify(current));
+  const stored = await AsyncStorage.getItem(cacheKey(uid));
+  const claimLocal = await AsyncStorage.getItem(claimLocalKey) === uid;
+  const next = stored ? JSON.parse(stored) as Snapshot : previousUid && !claimLocal ? emptySnapshot() : current;
   applySnapshot(next);
   await persistSnapshot(next);
-  await AsyncStorage.setItem(ownerKey, userId);
-  // Only the first authenticated account adopts the pre-existing local-only ledger.
-  return previousUserId === null;
+  await AsyncStorage.setItem(ownerKey, uid);
 }
 
-function payloadFor(resource: Resource, record: DomainRecord): Record<string, unknown> {
-  const { id, ...fields } = record;
-  if (resource === 'loans') {
-    const { emiPaise: _derivedEmi, ...loanFields } = fields as Loan;
-    return { ...loanFields, clientId: id };
-  }
-  return { ...fields, clientId: id };
-}
-
-async function readOutbox(userId: string): Promise<Change[]> {
-  const raw = await AsyncStorage.getItem(outboxKey(userId));
+async function readOutbox(uid: string): Promise<Change[]> {
+  const raw = await AsyncStorage.getItem(outboxKey(uid));
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -125,241 +88,84 @@ async function readOutbox(userId: string): Promise<Change[]> {
 }
 
 let outboxWrite = Promise.resolve();
-async function enqueue(userId: string, resource: Resource, record: DomainRecord, deleted = false) {
+async function enqueue(uid: string, resource: Resource, record: DomainRecord, deleted = false) {
   const id = record.id;
-  const data = deleted ? undefined : payloadFor(resource, record);
-  const next: Change = { opId: makeOpId(), resource, id, deleted, queuedAt: new Date().toISOString(), ...(data ? { data } : {}) };
+  const change: Change = { opId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`, resource, id, deleted, ...(deleted ? {} : { data: record }) };
   outboxWrite = outboxWrite.catch(() => {}).then(async () => {
-    const changes = await readOutbox(userId);
-    const remaining = changes.filter((change) => !(change.resource === resource && change.id === id));
-    remaining.push(next);
-    await AsyncStorage.setItem(outboxKey(userId), JSON.stringify(remaining));
+    const pending = await readOutbox(uid);
+    const remaining = pending.filter((item) => !(item.resource === resource && item.id === id));
+    remaining.push(change);
+    await AsyncStorage.setItem(outboxKey(uid), JSON.stringify(remaining));
   });
   await outboxWrite;
 }
 
-function orderChange(a: Change, b: Change) {
-  if (a.deleted !== b.deleted) return a.deleted ? -1 : 1;
-  const order: Resource[] = a.deleted
-    ? ['entries', 'loan-payments', 'loans', 'goals']
-    : ['loans', 'goals', 'loan-payments', 'entries'];
-  return order.indexOf(a.resource) - order.indexOf(b.resource);
-}
-
-function withoutServerFields(record: RemoteRecord, resource: Resource): DomainRecord {
-  const { id: remoteId, clientId, createdAt: _created, updatedAt: _updated, deletedAt: _deleted, ownerId: _owner, __v: _version, ...fields } = record;
-  const id = String(remoteId ?? clientId ?? '');
-  if (resource === 'entries') return { ...fields, id } as unknown as Entry;
-  if (resource === 'goals') return { ...fields, id } as unknown as Goal;
-  if (resource === 'loans') return { ...fields, id } as unknown as Loan;
-  return { ...fields, id } as unknown as LoanPayment;
-}
-
-async function applyOneRemote(resource: Resource, record: RemoteRecord, deleted = false) {
-  const id = String(record.id ?? record.clientId ?? '');
-  if (!id) return;
-  const snapshot = currentSnapshot();
-  if (resource === 'entries') snapshot.entries = deleted ? snapshot.entries.filter((x) => x.id !== id) : replaceById(snapshot.entries, withoutServerFields(record, resource) as Entry);
-  if (resource === 'goals') snapshot.goals = deleted ? snapshot.goals.filter((x) => x.id !== id) : replaceById(snapshot.goals, withoutServerFields(record, resource) as Goal);
-  if (resource === 'loans') snapshot.loans = deleted ? snapshot.loans.filter((x) => x.id !== id) : replaceById(snapshot.loans, withoutServerFields(record, resource) as Loan);
-  if (resource === 'loan-payments') snapshot.payments = deleted ? snapshot.payments.filter((x) => x.id !== id) : replaceById(snapshot.payments, withoutServerFields(record, resource) as LoanPayment);
-  applySnapshot(snapshot);
-  await persistSnapshot(snapshot);
-}
-
-function replaceById<T extends { id: string }>(rows: T[], value: T): T[] {
-  const index = rows.findIndex((row) => row.id === value.id);
-  if (index < 0) return [...rows, value];
-  const next = [...rows];
-  next[index] = value;
-  return next;
-}
-
-async function acknowledgeChange(userId: string, change: Change) {
-  const changes = await readOutbox(userId);
-  const remaining = changes.filter((item) => item.opId !== change.opId);
-  await AsyncStorage.setItem(outboxKey(userId), JSON.stringify(remaining));
-}
-
-function syncRequest<T>(userId: string, path: string, options: RequestInit = {}) {
-  return authenticatedRequest<T>(path, { ...options, signal: accountControllers.get(userId)?.signal });
-}
-
-async function syncChange(userId: string, change: Change) {
-  const base = `/${change.resource}/${encodeURIComponent(change.id)}`;
-  if (change.deleted) {
-    try {
-      await syncRequest<void>(userId, base, { method: 'DELETE' });
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.status !== 404) throw error;
-    }
-    return;
-  }
-  try {
-    await syncRequest(userId, `/${change.resource}`, { method: 'POST', body: JSON.stringify(change.data) });
-  } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 409 || error.code !== 'CLIENT_ID_CONFLICT') throw error;
-    const response = await syncRequest<{ data: RemoteRecord }>(userId, base);
-    const remote = response.data;
-    const remoteUpdatedAt = remote.updatedAt;
-    if (!remoteUpdatedAt || new Date(remoteUpdatedAt).getTime() > new Date(change.queuedAt).getTime()) {
-      await applyOneRemote(change.resource, remote);
-      return;
-    }
-    const { clientId: _clientId, ...fields } = change.data ?? {};
-    await syncRequest(userId, base, {
-      method: 'PATCH',
-      headers: { 'If-Match': new Date(remoteUpdatedAt).toISOString() },
-      body: JSON.stringify(fields),
-    });
+async function flushOutbox(uid: string) {
+  for (const change of await readOutbox(uid)) {
+    if (activeUserId !== uid) return;
+    if (change.deleted) await removeRecord(uid, change.resource, change.id);
+    else if (change.data) await saveRecord(uid, change.resource, change.data);
+    const remaining = (await readOutbox(uid)).filter((item) => item.opId !== change.opId);
+    await AsyncStorage.setItem(outboxKey(uid), JSON.stringify(remaining));
   }
 }
 
-async function flushOutbox(userId: string) {
-  const changes = (await readOutbox(userId)).sort(orderChange);
-  for (const change of changes) {
-    await syncChange(userId, change);
-    await acknowledgeChange(userId, change);
-  }
-}
-
-async function fetchBootstrap(userId: string) {
-  const cursors: Record<Resource, string | null> = { entries: null, goals: null, loans: null, 'loan-payments': null };
-  const completed = new Set<Resource>();
-  const records: Record<Resource, RemoteRecord[]> = { entries: [], goals: [], loans: [], 'loan-payments': [] };
-  while (completed.size < 4) {
-    const params = new URLSearchParams({ limit: '100' });
-    const cursorParams: Record<Resource, string> = {
-      entries: 'entriesCursor', goals: 'goalsCursor', loans: 'loansCursor', 'loan-payments': 'loanPaymentsCursor',
-    };
-    for (const resource of Object.keys(cursorParams) as Resource[]) {
-      if (cursors[resource]) params.set(cursorParams[resource], cursors[resource]!);
-    }
-    const response = await syncRequest<BootstrapResponse>(userId, `/sync/bootstrap?${params.toString()}`);
-    for (const resource of Object.keys(cursorParams) as Resource[]) {
-      if (completed.has(resource)) continue;
-      const page = response.resources[resource];
-      records[resource].push(...page.data);
-      cursors[resource] = page.nextCursor;
-      if (!page.nextCursor) completed.add(resource);
-    }
-  }
-  return records;
-}
-
-function localRecords(snapshot: Snapshot): Record<Resource, DomainRecord[]> {
-  return { entries: snapshot.entries, goals: snapshot.goals, loans: snapshot.loans, 'loan-payments': snapshot.payments };
-}
-
-async function applyBootstrap(userId: string, records: Record<Resource, RemoteRecord[]>) {
-  const pending = await readOutbox(userId);
-  const snapshot = currentSnapshot();
-  const localByResource = localRecords(snapshot);
-  for (const resource of Object.keys(records) as Resource[]) {
-    const currentById = new Map(localByResource[resource].map((record) => [record.id, record]));
-    const pendingForResource = pending.filter((item) => item.resource === resource);
-    const pendingIds = new Set(pendingForResource.map((item) => item.id));
-    const next = new Map<string, DomainRecord>();
-    for (const record of records[resource]) {
-      const value = withoutServerFields(record, resource);
-      if (!pendingIds.has(value.id)) next.set(value.id, value);
-    }
-    for (const item of pendingForResource) {
-      if (item.deleted) next.delete(item.id);
-      else {
-        const current = currentById.get(item.id);
-        if (current) next.set(item.id, current);
-      }
-    }
-    const values = [...next.values()];
-    if (resource === 'entries') snapshot.entries = values as Entry[];
-    if (resource === 'goals') snapshot.goals = values as Goal[];
-    if (resource === 'loans') snapshot.loans = values as Loan[];
-    if (resource === 'loan-payments') snapshot.payments = values as LoanPayment[];
-  }
-  applySnapshot(snapshot);
-  await persistSnapshot(snapshot);
-}
-
-async function applyDelta(userId: string) {
-  let cursor = await AsyncStorage.getItem(cursorKey(userId));
-  let hasMore = true;
-  while (hasMore) {
-    const params = new URLSearchParams({ limit: '100' });
-    if (cursor) params.set('cursor', cursor);
-    const response = await syncRequest<{ changes: { resource: Resource; deleted: boolean; data: RemoteRecord }[]; nextCursor: string; hasMore: boolean }>(userId, `/sync/changes?${params.toString()}`);
-    const pending = await readOutbox(userId);
-    const pendingKeys = new Set(pending.map((item) => `${item.resource}:${item.id}`));
-    for (const change of response.changes) {
-      const id = String(change.data.id ?? change.data.clientId ?? '');
-      if (!pendingKeys.has(`${change.resource}:${id}`)) await applyOneRemote(change.resource, change.data, change.deleted);
-    }
-    await persistSnapshot(currentSnapshot());
-    cursor = response.nextCursor;
-    if (cursor) await AsyncStorage.setItem(cursorKey(userId), cursor);
-    hasMore = response.hasMore;
-  }
-}
-
-function scheduleRetry(userId: string) {
-  if (retryTimer || activeUserId !== userId || accountControllers.get(userId)?.signal.aborted) return;
+function scheduleRetry(uid: string) {
+  if (retryTimer || activeUserId !== uid) return;
   const delay = Math.min(60_000, 1_000 * 2 ** Math.min(retryCount, 6));
   retryCount += 1;
   retryTimer = setTimeout(() => {
     retryTimer = null;
-    if (activeUserId === userId) void runSyncCycle(userId);
+    void flushOutbox(uid).then(() => { retryCount = 0; }).catch(() => scheduleRetry(uid));
   }, delay);
 }
 
-function runSyncCycle(userId: string): Promise<void> {
-  if (cycleInFlight) {
-    if (cycleInFlightUserId === userId) return cycleInFlight;
-    return cycleInFlight.catch(() => {}).then(() => runSyncCycle(userId));
-  }
-  if (activeUserId !== userId) return Promise.resolve();
-  cycleInFlightUserId = userId;
-  cycleInFlight = (async () => {
-    try {
-      await flushOutbox(userId);
-      const didBootstrap = await AsyncStorage.getItem(bootstrapKey(userId));
-      if (!didBootstrap) {
-        const records = await fetchBootstrap(userId);
-        await applyBootstrap(userId, records);
-        await AsyncStorage.setItem(bootstrapKey(userId), '1');
-      }
-      await applyDelta(userId);
-      retryCount = 0;
-    } catch {
-      // Preserve local edits and their outbox entries. Retry with capped backoff.
-      scheduleRetry(userId);
+async function seedOrLoadCloudData(uid: string, shouldSeedLocal: boolean) {
+  const cloud = await fetchAccountData(uid);
+  const cloudCount = cloud.entries.length + cloud.goals.length + cloud.loans.length + cloud.payments.length;
+  if (cloudCount === 0 && shouldSeedLocal) {
+    for (const [resource, records] of Object.entries(recordsFor(currentSnapshot())) as [Resource, DomainRecord[]][]) {
+      for (const record of records) await saveRecord(uid, resource, record);
     }
-  })().finally(() => { cycleInFlight = null; cycleInFlightUserId = null; });
-  return cycleInFlight;
+    await AsyncStorage.setItem(bootstrappedKey(uid), '1');
+    await AsyncStorage.removeItem(claimLocalKey);
+    return;
+  }
+  if (cloudCount > 0) {
+    applySnapshot({ entries: cloud.entries, goals: cloud.goals, loans: cloud.loans, payments: cloud.payments });
+    await persistSnapshot(currentSnapshot());
+  }
+  await AsyncStorage.setItem(bootstrappedKey(uid), '1');
+  await AsyncStorage.removeItem(claimLocalKey);
 }
 
-function observeStore<S, T extends { id: string }>(resource: Resource, select: (state: S) => T[], subscribe: (listener: (state: S, previous: S) => void) => () => void) {
+function observeStore<T extends { id: string }, State>(
+  resource: Resource,
+  select: (state: State) => T[],
+  subscribe: (listener: (state: State, previous: State) => void) => () => void,
+) {
   return subscribe((state, previous) => {
     if (suppressStoreEvents || !activeUserId) return;
     const current = select(state);
-    const previousRows = select(previous);
-    const oldById = new Map(previousRows.map((item) => [item.id, item]));
+    const oldRows = select(previous);
+    const oldById = new Map(oldRows.map((item) => [item.id, item]));
     const currentById = new Map(current.map((item) => [item.id, item]));
     for (const item of current) {
       if (JSON.stringify(oldById.get(item.id)) !== JSON.stringify(item)) {
-        const ownerId = activeUserId;
-        if (ownerId) void enqueue(ownerId, resource, item as unknown as DomainRecord).then(() => runSyncCycle(ownerId));
+        const uid = activeUserId;
+        void enqueue(uid, resource, item as unknown as DomainRecord).then(() => flushOutbox(uid)).catch(() => scheduleRetry(uid));
       }
     }
-    for (const item of previousRows) {
+    for (const item of oldRows) {
       if (!currentById.has(item.id)) {
-        const ownerId = activeUserId;
-        if (ownerId) void enqueue(ownerId, resource, item as unknown as DomainRecord, true).then(() => runSyncCycle(ownerId));
+        const uid = activeUserId;
+        void enqueue(uid, resource, item as unknown as DomainRecord, true).then(() => flushOutbox(uid)).catch(() => scheduleRetry(uid));
       }
     }
   });
 }
 
-export async function startDataSync(userId: string): Promise<() => void> {
+export async function startDataSync(uid: string): Promise<() => void> {
   activeCleanup?.();
   activeCleanup = null;
   const myGeneration = ++generation;
@@ -368,40 +174,64 @@ export async function startDataSync(userId: string): Promise<() => void> {
   activeUserId = null;
   await waitForStoreHydration();
   if (generation !== myGeneration) return () => {};
-  const shouldMigrate = await activateAccount(userId);
+  const currentOwner = await AsyncStorage.getItem(ownerKey);
+  // Only migrate a local ledger when the user had this account already, or
+  // when the auth store marked a matching legacy email during sign-in.
+  // Fresh installations must not upload the app's sample ledger as real data.
+  const shouldSeedLocal = currentOwner === uid || await AsyncStorage.getItem(claimLocalKey) === uid;
+  await activateAccount(uid);
   if (generation !== myGeneration) return () => {};
-  activeUserId = userId;
-  const controller = new AbortController();
-  accountControllers.set(userId, controller);
-  const unsubscribers = [
-    observeStore('entries', (state) => state.entries, useEntries.subscribe),
-    observeStore('goals', (state) => state.goals, useGoals.subscribe),
-    observeStore('loans', (state) => state.loans, useLoans.subscribe),
-    observeStore('loan-payments', (state) => state.payments, useLoans.subscribe),
-  ];
-  if (shouldMigrate) {
-    void (async () => {
-      const snapshot = currentSnapshot();
-      for (const [resource, items] of Object.entries(localRecords(snapshot)) as [Resource, DomainRecord[]][]) {
-        if (generation !== myGeneration) return;
-        for (const item of items) await enqueue(userId, resource, item);
-      }
-      if (generation === myGeneration) await runSyncCycle(userId);
-    })().catch(() => scheduleRetry(userId));
-  } else {
-    void runSyncCycle(userId);
+  activeUserId = uid;
+
+  try {
+    if (await AsyncStorage.getItem(bootstrappedKey(uid)) !== '1') await seedOrLoadCloudData(uid, shouldSeedLocal);
+    await flushOutbox(uid);
+    retryCount = 0;
+  } catch {
+    scheduleRetry(uid);
   }
-  const timer = setInterval(() => {
-    if (activeUserId === userId) void runSyncCycle(userId);
-  }, 60_000);
+
+  const applyRemote = async (resource: Resource, docs: { id: string; data: () => Record<string, unknown> }[]) => {
+    if (generation !== myGeneration || activeUserId !== uid) return;
+    const cloudRecords = docs.map((snapshot) => ({ ...snapshot.data(), id: snapshot.id })) as DomainRecord[];
+    const current = currentSnapshot();
+    const pending = await readOutbox(uid);
+    const pendingForResource = new Set(pending.filter((item) => item.resource === resource).map((item) => item.id));
+    const localRecords = recordsFor(current)[resource];
+    const merged = new Map(cloudRecords.map((record) => [record.id, record]));
+    for (const change of pending.filter((item) => item.resource === resource)) {
+      if (change.deleted) merged.delete(change.id);
+      else if (change.data) merged.set(change.id, change.data);
+    }
+    // Retain any local records with queued writes until Firestore acknowledges them.
+    for (const local of localRecords) if (pendingForResource.has(local.id)) merged.set(local.id, local);
+    const next = [...merged.values()];
+    if (resource === 'entries') current.entries = next as Entry[];
+    if (resource === 'goals') current.goals = next as Goal[];
+    if (resource === 'loans') current.loans = next as Loan[];
+    if (resource === 'loan-payments') current.payments = next as LoanPayment[];
+    applySnapshot(current);
+    await persistSnapshot(current);
+  };
+
+  const unsubs = (['entries', 'goals', 'loans', 'loan-payments'] as Resource[]).map((resource) =>
+    onSnapshot(recordsRef(uid, resource), (snapshot) => {
+      void applyRemote(resource, snapshot.docs).catch(() => {});
+    }, () => scheduleRetry(uid)),
+  );
+  const localSubs = [
+    observeStore('entries', (state: { entries: Entry[] }) => state.entries, useEntries.subscribe),
+    observeStore('goals', (state: { goals: Goal[] }) => state.goals, useGoals.subscribe),
+    observeStore('loans', (state: { loans: Loan[] }) => state.loans, useLoans.subscribe),
+    observeStore('loan-payments', (state: { payments: LoanPayment[] }) => state.payments, useLoans.subscribe),
+  ];
+
   const cleanup = () => {
     if (generation !== myGeneration) return;
     ++generation;
     activeUserId = null;
-    controller.abort();
-    if (cycleInFlightUserId !== userId) accountControllers.delete(userId);
-    clearInterval(timer);
-    for (const unsubscribe of unsubscribers) unsubscribe();
+    unsubs.forEach((unsubscribe) => unsubscribe());
+    localSubs.forEach((unsubscribe) => unsubscribe());
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = null;
     if (activeCleanup === cleanup) activeCleanup = null;
@@ -414,7 +244,15 @@ export function stopDataSync() {
   activeCleanup?.();
 }
 
-export async function clearAccountDataCache(userId: string) {
-  await AsyncStorage.multiRemove([outboxKey(userId), cacheKey(userId), cursorKey(userId), bootstrapKey(userId)]);
-  if (await AsyncStorage.getItem(ownerKey) === userId) await AsyncStorage.removeItem(ownerKey);
+export async function clearAccountDataCache(uid: string) {
+  await AsyncStorage.multiRemove([outboxKey(uid), cacheKey(uid), bootstrappedKey(uid)]);
+  if (await AsyncStorage.getItem(ownerKey) === uid) await AsyncStorage.removeItem(ownerKey);
+}
+
+export async function exportAccountData(uid: string) {
+  return fetchAccountData(uid);
+}
+
+export async function deleteAccountData(uid: string) {
+  await deleteFirebaseAccountData(uid);
 }

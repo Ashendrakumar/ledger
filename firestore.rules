@@ -1,0 +1,161 @@
+rules_version = '2';
+
+// Assumed data model (all records are scoped beneath users/{uid}):
+// users/{uid}: uid, optional displayName, setupComplete
+// users/{uid}/entries/{id}: kind, type, amountPaise, category, month,
+//   optional date, note, loanPaymentId
+// users/{uid}/goals/{id}: name, targetPaise, savedPaise, targetMonth
+// users/{uid}/loans/{id}: name, principalPaise, annualRatePct, tenureMonths,
+//   startMonth, emiPaise, optional dueDay and trackExpenses
+// users/{uid}/loanPayments/{id}: loanId, month, amountPaise, kind,
+//   optional date and note
+// Email and other account PII stay in Firebase Authentication, not Firestore.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    function uidUnchanged() {
+      return request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function validString(value, minLength, maxLength) {
+      return value is string && value.size() >= minLength && value.size() <= maxLength;
+    }
+
+    function isPositive(value) {
+      return value is int && value > 0;
+    }
+
+    function validMonth(value) {
+      return value is string && value.matches('^[0-9]{4}-(0[1-9]|1[0-2])$');
+    }
+
+    function validDate(value) {
+      return value is string && value.matches('^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])$');
+    }
+
+    function validOptionalText(data, key, maxLength) {
+      return !(key in data) || validString(data[key], 0, maxLength);
+    }
+
+    function validProfile(data) {
+      return hasRequiredFields(data, ['uid', 'setupComplete'])
+        && hasOnlyAllowedFields(data, ['uid', 'displayName', 'setupComplete'])
+        && data.uid is string
+        && data.setupComplete is bool
+        && validOptionalText(data, 'displayName', 80);
+    }
+
+    function validEntry(data) {
+      return hasRequiredFields(data, ['kind', 'type', 'amountPaise', 'category', 'month'])
+        && hasOnlyAllowedFields(data, ['kind', 'type', 'amountPaise', 'category', 'month', 'date', 'note', 'loanPaymentId'])
+        && data.kind in ['actual', 'planned']
+        && data.type in ['expense', 'income', 'saving']
+        && data.amountPaise is int && data.amountPaise >= 0
+        && validString(data.category, 1, 64)
+        && validMonth(data.month)
+        && (!('date' in data) || validDate(data.date))
+        && validOptionalText(data, 'note', 500)
+        && validOptionalText(data, 'loanPaymentId', 128);
+    }
+
+    function validGoal(data) {
+      return hasRequiredFields(data, ['name', 'targetPaise', 'savedPaise', 'targetMonth'])
+        && hasOnlyAllowedFields(data, ['name', 'targetPaise', 'savedPaise', 'targetMonth'])
+        && validString(data.name, 1, 80)
+        && isPositive(data.targetPaise)
+        && data.savedPaise is int && data.savedPaise >= 0
+        && validMonth(data.targetMonth);
+    }
+
+    function validLoan(data) {
+      return hasRequiredFields(data, ['name', 'principalPaise', 'annualRatePct', 'tenureMonths', 'startMonth', 'emiPaise'])
+        && hasOnlyAllowedFields(data, ['name', 'principalPaise', 'annualRatePct', 'tenureMonths', 'startMonth', 'emiPaise', 'dueDay', 'trackExpenses'])
+        && validString(data.name, 1, 80)
+        && isPositive(data.principalPaise)
+        && data.annualRatePct is number && data.annualRatePct >= 0 && data.annualRatePct <= 100
+        && data.tenureMonths is int && data.tenureMonths >= 1 && data.tenureMonths <= 600
+        && validMonth(data.startMonth)
+        && isPositive(data.emiPaise)
+        && (!('dueDay' in data) || (data.dueDay is int && data.dueDay >= 1 && data.dueDay <= 31))
+        && (!('trackExpenses' in data) || data.trackExpenses is bool);
+    }
+
+    function validPayment(data) {
+      return hasRequiredFields(data, ['loanId', 'month', 'amountPaise', 'kind'])
+        && hasOnlyAllowedFields(data, ['loanId', 'month', 'amountPaise', 'kind', 'date', 'note'])
+        && validString(data.loanId, 1, 128)
+        && validMonth(data.month)
+        && data.amountPaise is int && data.amountPaise >= 0
+        && data.kind in ['actual', 'planned', 'prepayment']
+        && (!('date' in data) || validDate(data.date))
+        && validOptionalText(data, 'note', 500);
+    }
+
+    match /users/{uid} {
+      allow get: if isOwner(uid);
+      allow list: if false;
+      allow create: if isOwner(uid) && uidUnchanged() && validProfile(request.resource.data);
+      allow update: if isOwner(uid)
+        && isDocOwner()
+        && uidNotModified()
+        && validProfile(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'setupComplete']);
+      allow delete: if isOwner(uid);
+
+      match /entries/{entryId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validEntry(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+
+      match /goals/{goalId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validGoal(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+
+      match /loans/{loanId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validLoan(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+
+      match /loanPayments/{paymentId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validPayment(request.resource.data);
+        allow delete: if isOwner(uid);
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

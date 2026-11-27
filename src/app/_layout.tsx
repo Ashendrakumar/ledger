@@ -17,7 +17,6 @@ import { AppLockGate } from '@/components/AppLockGate';
 import { ToastProvider } from '@/components/ui/Toast';
 import { initEmiReminderSync } from '@/lib/reminders';
 import { initBudgetAlertSync } from '@/lib/budgetAlerts';
-import { flushOnboarding } from '@/lib/onboardingQueue';
 import { startDataSync } from '@/lib/dataSync';
 import { isMockUserId } from '@/lib/appMode';
 
@@ -48,10 +47,6 @@ export default function RootLayout() {
   useEffect(() => {
     if (hydrated) void restoreSession();
   }, [hydrated, restoreSession]);
-
-  useEffect(() => {
-    if (sessionChecked && userId && !isMockUserId(userId)) void flushOnboarding(userId);
-  }, [sessionChecked, userId]);
 
   useEffect(() => {
     if (!sessionChecked || !userId || isMockUserId(userId)) return;

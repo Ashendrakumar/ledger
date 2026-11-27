@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, View, FlatList } from 'react-native';
+import * as FS from 'expo-file-system';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -22,6 +23,8 @@ import { useUi } from '@/store/ui';
 import { formatINR } from '@/lib/money';
 import { total } from '@/lib/selectors';
 import type { Entry, EntryType } from '@/types';
+import { parseCsv } from '@/lib/csv';
+import { useToast } from '@/components/ui/Toast';
 
 const SECTIONS: { type: EntryType; title: string }[] = [
   { type: 'income', title: 'Income' },
@@ -36,6 +39,8 @@ type Row =
 export default function Activity() {
   const insets = useSafeAreaInsets();
   const { entries, remove } = useEntries();
+  const addMany = useEntries((state) => state.addMany);
+  const { showError } = useToast();
   const payments = useLoans((state) => state.payments);
   const month = useUi((state) => state.month);
   const [filter, setFilter] = useState<EntryType | 'all'>('all');
@@ -134,6 +139,18 @@ export default function Activity() {
     setFilter('all');
     setAccumulated(true);
   };
+  const importCsv = async () => {
+    try {
+      const result = await FS.File.pickFileAsync({ mimeTypes: ['text/csv'], multipleFiles: false });
+      if (result.canceled) return;
+      const imported = parseCsv(await result.result.text());
+      if (!imported.length) return showError('No entries found in the CSV file.');
+      addMany(imported);
+      Alert.alert('Imported', `${imported.length} entries added to the ledger.`);
+    } catch {
+      showError('Could not import. Please try again.');
+    }
+  };
   return (
     <View style={{ flex: 1, backgroundColor: colors.canvas }}>
       <FlatList
@@ -173,7 +190,7 @@ export default function Activity() {
                 </View>
               </View>
             </View> : null}
-            {!accumulated ? (
+            {!accumulated && (actualEntries.length > 0 || normalizedQuery.length > 0) ? (
               <EntryListControls
                 query={q}
                 onQueryChange={setQ}
@@ -183,7 +200,7 @@ export default function Activity() {
                 onToggleAccumulated={showAccumulated}
               />
             ) : null}
-            {!accumulated ? <EntryListSummary label={summaryLabel} count={summary.count} totalPaise={summary.total} /> : null}
+            {!accumulated && (actualEntries.length > 0 || normalizedQuery.length > 0) ? <EntryListSummary label={summaryLabel} count={summary.count} totalPaise={summary.total} /> : null}
           </View>
         }
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 130 + insets.bottom }}
@@ -222,10 +239,14 @@ export default function Activity() {
               const noMatches = actualEntries.length > 0;
               return (
                 <EmptyState
-                  title={noMatches ? 'No matching entries' : 'Nothing recorded yet'}
-                  description={noMatches ? 'Try changing your search or filter, or add a new entry.' : 'Add your first entry to start tracking this month.'}
-                  actionLabel="Add entry"
+                  title={noMatches ? 'No matching entries' : 'No transactions yet'}
+                  description={noMatches ? 'Try changing your search or filter, or add a new transaction.' : 'Log what you spend and earn and it will show up here, grouped by date.'}
+                  actionLabel="Add transaction"
                   onAction={() => router.push('/add')}
+                  variant={noMatches ? undefined : 'actual'}
+                  secondaryLabel={noMatches ? undefined : 'Import from CSV'}
+                  onSecondary={noMatches ? undefined : importCsv}
+                  hint={noMatches ? undefined : 'Tip: tap the + button anywhere to add faster.'}
                 />
               );
             }

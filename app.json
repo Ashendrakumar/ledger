@@ -21,6 +21,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.ifourashendra.ledger",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT"
@@ -38,6 +39,7 @@
     },
     "scheme": "ledger",
     "plugins": [
+      "react-native-nitro-google-signin",
       "expo-router",
       "expo-font",
       [
@@ -64,13 +66,13 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-secure-store"
+      "expo-secure-store",
+      "react-native-nitro-google-signin"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "apiBase": "http://10.0.2.2:3000",
       "router": {},
       "eas": {
         "projectId": "8caba142-7b25-4fd1-b444-d642664abd74"

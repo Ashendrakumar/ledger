@@ -13,7 +13,6 @@ import { useAuth } from '@/store/auth';
 import { useEntries } from '@/store/entries';
 import { formatINR, toPaise } from '@/lib/money';
 import { fullMonth } from '@/lib/dates';
-import { flushOnboarding } from '@/lib/onboardingQueue';
 import type { Entry } from '@/types';
 
 const LINES = [
@@ -41,10 +40,7 @@ export default function Onboarding() {
 
   const suggest = () => setAmounts(LINES.map((line) => Math.round(amount * line.share)));
   const finishSetup = (created: Entry[]) => {
-    const userId = useAuth.getState().user?.id;
-    void completeSetup(created).then(() => {
-      if (userId) return flushOnboarding(userId);
-    }).catch(() => {});
+    void completeSetup(created).catch(() => {});
     router.replace('/(tabs)');
   };
   const finish = () => {
