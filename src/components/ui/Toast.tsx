@@ -11,7 +11,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toast, setToast] = useState<{ message: string } | null>(null);
   const insets = useSafeAreaInsets();
   const [opacity] = useState(() => new Animated.Value(0));
-  const [translateY] = useState(() => new Animated.Value(20));
+  const [translateY] = useState(() => new Animated.Value(-20));
 
   const showError = useCallback((nextMessage: string) => {
     setToast({ message: nextMessage });
@@ -21,7 +21,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!toast) return;
     opacity.setValue(0);
-    translateY.setValue(20);
+    translateY.setValue(-20);
     const animation = Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
       Animated.spring(translateY, { toValue: 0, speed: 20, bounciness: 3, useNativeDriver: true }),
@@ -39,7 +39,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <View style={{ flex: 1 }}>
         {children}
         {toast ? (
-          <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: Math.max(insets.bottom, 12) + 72, alignItems: 'center', paddingHorizontal: 16 }}>
+          <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, top: Math.max(insets.top, 12) + 8, alignItems: 'center', paddingHorizontal: 16 }}>
             <Animated.View
               accessibilityRole="alert"
               accessibilityLiveRegion="assertive"
