@@ -1,0 +1,2 @@
+Copy your APK into this folder and name it exactly:  Ladger.apk
+(If you host the APK elsewhere, set APK_URL in lib/config.ts instead and delete this file.)
